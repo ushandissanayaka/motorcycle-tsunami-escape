@@ -19,8 +19,8 @@ function ActionTile({ icon, label, tone, onClick, detail }) {
 }
 
 export default function StartingPlaceHUD({
-  bikes, wins, finishes, notice, zone, onWavesChange, selectedBike, onSelectBike, onEarnWin,
-  speed, onCollectSpeed, level, levelProgress, customSpeed, onCustomSpeed,
+  bikes, wins, finishes, notice, celebration, zone, onWavesChange, selectedBike, onSelectBike,
+  speed, level, levelProgress, customSpeed, onCustomSpeed,
 }) {
   const [showGarage, setShowGarage] = useState(false);
   const [musicOn, setMusicOn] = useState(true);
@@ -92,7 +92,7 @@ export default function StartingPlaceHUD({
       {showGarage && (
         <div className="garage-popover">
           <button className="garage-close" aria-label="Close garage" onClick={() => setShowGarage(false)}>X</button>
-          <BikeSection bikes={bikes} wins={wins} finishes={finishes} selectedBike={selectedBike} onSelect={onSelectBike} onEarnWin={onEarnWin} />
+          <BikeSection bikes={bikes} wins={wins} finishes={finishes} selectedBike={selectedBike} onSelect={onSelectBike} />
         </div>
       )}
 
@@ -120,16 +120,23 @@ export default function StartingPlaceHUD({
 
       <section className="speed-readout"><strong>{speed.toLocaleString()} Speed</strong><small>RIDE TO BUILD YOUR SPEED</small></section>
       <section className="level-meter">
-        <div className="level-fill" style={{ width: `${levelProgress}%` }} />
+        <div className="level-fill" style={{ width: `${speed === 0 ? 0 : levelProgress}%` }} />
         <strong>Level {level}</strong><span>{levelProgress}/100</span>
       </section>
-      <div className="pickup-row">
-        <button onClick={() => onCollectSpeed(100_000)}><span>{'\u{1F45F}'}</span> +100K</button>
-        <button onClick={() => onCollectSpeed(1_000_000)}><span>{'\u{1F45F}'}</span> +1M</button>
-        <button onClick={() => onCollectSpeed(10_000_000)}><span>{'\u{2B50}'}</span> +10M Speed</button>
-      </div>
       <div className="drive-hint"><b>W A S D</b> Ride <b>SPACE</b> Hop <b>SCROLL / PINCH</b> Zoom <b>RIGHT-CLICK DRAG</b> Rotate</div>
       {toast && <div className="game-toast" role="status">{toast}</div>}
+      {celebration && (
+        <div className="win-celebration" role="status" aria-live="polite">
+          <div className="celebration-confetti" aria-hidden="true">🏆 ✨ 🏆 ✨ 🏆</div>
+          <section className="celebration-card">
+            <span className="celebration-trophy" aria-hidden="true">🏆</span>
+            <small>TROPHY COLLECTED</small>
+            <strong>+{celebration.rewardWins} {celebration.rewardWins === 1 ? 'WIN' : 'WINS'}!</strong>
+            <span className="celebration-total">TOTAL WINS: {celebration.totalWins.toLocaleString()}</span>
+            <b>RETURNING TO START</b>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

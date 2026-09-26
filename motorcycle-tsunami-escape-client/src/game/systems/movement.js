@@ -4,11 +4,14 @@ import { clampToMap } from '../../shared/constants.js';
 
 const TURN_SPEED = 2.4; // radians/sec
 const MOVE_SPEED = 9; // units/sec, tune per your world scale
+const JUMP_SPEED = 6; // units/sec upward
+const GRAVITY = 16; // units/sec^2
 
 export function createInputState() {
   const keys = { w: false, a: false, s: false, d: false, space: false };
 
   const onKey = (down) => (e) => {
+    if (e.code === 'Space' && !(e.target instanceof HTMLInputElement && e.target.type === 'text')) e.preventDefault();
     switch (e.code) {
       case 'KeyW': keys.w = down; break;
       case 'KeyA': keys.a = down; break;
@@ -47,59 +50,66 @@ function moveWithCollision(target, dx, dz, collision) {
   }
 }
 
-/** Free-roam hub movement: W/S drive forward/back, A/D turn. Pass a
- * `collision` (systems/collision.js) to ride up ramps and be stopped by
- * walls. Swap for lane-strafe controls once you build the endless-runner
+/** One slice of vertical motion: stand on / step up to the surface below, drive off an edge into a fall, or fly and land. */
+function stepVertical(target, dt, collision) {
+  const data = target.userData;
+  const { x, z } = target.position;
+  const support = collision ? collision.supportAt(x, z, target.position.y) : 0;
+
+  if (data.grounded) {
+    if (target.position.y > support + STEP_HEIGHT) {
+      // Drove off a real edge (not just down a ramp): start falling.
+      data.grounded = false;
+      data.jumpVelocity = 0;
+    } else {
+      target.position.y = support;
+      return;
+    }
+  }
+
+  // A ledge that is within a step is climbed even in mid-air.
+  target.position.y = Math.max(target.position.y, support);
+  target.position.y += data.jumpVelocity * dt;
+  data.jumpVelocity -= GRAVITY * dt;
+  const landing = collision ? collision.supportAt(x, z, target.position.y) : 0;
+  if (data.jumpVelocity <= 0 && target.position.y <= landing) {
+    target.position.y = landing;
+    data.jumpVelocity = 0;
+    data.grounded = true;
+  }
+}
+
+/** Free-roam hub movement: W/S drive forward/back, A/D turn, Space jumps. Pass a
+ * `collision` (systems/collision.js) to ride up ramps, be stopped by walls and
+ * drop into pits (and jump back out of them). Falling is integrated in every sub-step of the drive, so a
+ * rider fast enough to cross a pit before gravity pulls them down clears it.
+ * Swap for lane-strafe controls once you build the endless-runner
  * road scene. */
 export function updateMovement(target, keys, deltaSeconds, collision = null) {
   if (keys.a) target.rotation.y += TURN_SPEED * deltaSeconds;
   if (keys.d) target.rotation.y -= TURN_SPEED * deltaSeconds;
 
+  target.userData.jumpVelocity ??= 0;
+  target.userData.grounded ??= true;
+  if (keys.space && target.userData.grounded) {
+    target.userData.jumpVelocity = target.userData.jumpSpeed || JUMP_SPEED;
+    target.userData.grounded = false;
+  }
+
   const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(target.quaternion);
   const speed = target.userData.moveSpeed || MOVE_SPEED;
   const drive = (keys.w ? speed : 0) - (keys.s ? speed * 0.6 : 0);
-  if (drive !== 0) {
-    const distance = Math.abs(drive) * deltaSeconds;
-    const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
-    const stepX = (forward.x * Math.sign(drive) * distance) / steps;
-    const stepZ = (forward.z * Math.sign(drive) * distance) / steps;
-    for (let i = 0; i < steps; i += 1) {
-      moveWithCollision(target, stepX, stepZ, collision);
-      target.position.y = Math.max(target.position.y, collision?.supportAt(target.position.x, target.position.z, target.position.y) ?? 0);
-    }
+  const distance = Math.abs(drive) * deltaSeconds;
+  const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
+  const stepX = (forward.x * Math.sign(drive) * distance) / steps;
+  const stepZ = (forward.z * Math.sign(drive) * distance) / steps;
+  for (let i = 0; i < steps; i += 1) {
+    if (drive !== 0) moveWithCollision(target, stepX, stepZ, collision);
+    stepVertical(target, deltaSeconds / steps, collision);
   }
 
   // Keep the rider inside the canyon wall.
   const inside = clampToMap(target.position.x, target.position.z);
   target.position.x = inside.x;
   target.position.z = inside.z;
-
-  target.userData.jumpVelocity ??= 0;
-  target.userData.grounded ??= true;
-  const { x, z } = target.position;
-  const support = collision ? collision.supportAt(x, z, target.position.y) : 0;
-
-  if (target.userData.grounded) {
-    if (target.position.y > support + STEP_HEIGHT) {
-      // Drove off a real edge (not just down a ramp): start falling.
-      target.userData.grounded = false;
-      target.userData.jumpVelocity = 0;
-    } else {
-      target.position.y = support;
-    }
-  }
-  if (keys.space && target.userData.grounded) {
-    target.userData.jumpVelocity = 6;
-    target.userData.grounded = false;
-  }
-  if (!target.userData.grounded) {
-    target.position.y += target.userData.jumpVelocity * deltaSeconds;
-    target.userData.jumpVelocity -= 16 * deltaSeconds;
-    const landing = collision ? collision.supportAt(x, z, target.position.y) : 0;
-    if (target.userData.jumpVelocity <= 0 && target.position.y <= landing) {
-      target.position.y = landing;
-      target.userData.jumpVelocity = 0;
-      target.userData.grounded = true;
-    }
-  }
 }

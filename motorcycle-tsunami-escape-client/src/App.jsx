@@ -9,17 +9,43 @@ import { loadingEnd, loadingStep, gameplayStart } from './bloxity/lifecycle.js';
 import { buildStartingPlace } from './game/scenes/StartingPlace.js';
 import { attachCameraControls, createChaseCamera, updateChaseCamera } from './game/systems/camera.js';
 import { createInputState, updateMovement } from './game/systems/movement.js';
+import { RIDER_HEIGHT } from './game/systems/collision.js';
+import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
 import { BIKES, isBikeUnlocked, requirementText, rideColor } from './shared/constants.js';
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
 const SAVE_KEY = 'mte-starting-place';
-const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter' };
+const SESSION_PROGRESS_KEY = 'mte-session-progress';
+const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter', collectedRewards: [], speed: 0, level: 1, levelProgress: 0 };
+const effectiveBikeSpeed = (baseSpeed, speed, level) =>
+  baseSpeed + Math.min(30, Math.sqrt(Math.max(0, speed)) * 0.25) + Math.min(100, Math.max(0, level - 1)) * 0.3;
 
 function readProfile() {
   try {
-    const profile = { ...freshProfile, ...JSON.parse(localStorage.getItem(SAVE_KEY) || '{}') };
+    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    const sessionProgress = JSON.parse(sessionStorage.getItem(SESSION_PROGRESS_KEY) || '{}');
+    // Clear the old untouched starter fill so zero-speed sessions show an empty bar.
+    if (sessionProgress.speed === 0 && sessionProgress.level === 1 && sessionProgress.levelProgress === 12) {
+      sessionProgress.levelProgress = 0;
+    }
+    // Speed and level belong to this tab's guest session. A newly opened tab
+    // starts fresh even when another tab has already played this browser game.
+    const profile = {
+      ...freshProfile,
+      wins: Number.isFinite(saved.wins) ? saved.wins : freshProfile.wins,
+      finishes: Number.isFinite(saved.finishes) ? saved.finishes : freshProfile.finishes,
+      selectedBike: saved.selectedBike ?? freshProfile.selectedBike,
+      collectedRewards: Array.isArray(saved.collectedRewards) ? saved.collectedRewards : [],
+      ...sessionProgress,
+    };
+    profile.speed = Number.isFinite(profile.speed) ? Math.max(0, profile.speed) : freshProfile.speed;
+    profile.level = Number.isFinite(profile.level) ? Math.max(1, profile.level) : freshProfile.level;
+    profile.levelProgress = Number.isFinite(profile.levelProgress)
+      ? Math.max(0, Math.min(99, profile.levelProgress))
+      : freshProfile.levelProgress;
+    if (profile.speed === 0) profile.levelProgress = 0;
     // Saves from before the bike store may name a bike that no longer exists.
     if (!BIKES.some((bike) => bike.id === profile.selectedBike)) profile.selectedBike = freshProfile.selectedBike;
     return profile;
@@ -33,11 +59,9 @@ export default function App() {
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const [presence, setPresence] = useState({ status: 'connecting', count: 1 });
-  const [speed, setSpeed] = useState(10);
-  const [level, setLevel] = useState(1);
-  const [levelProgress, setLevelProgress] = useState(12);
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
   const [notice, setNotice] = useState(null);
+  const [celebration, setCelebration] = useState(null);
   const [zone, setZone] = useState(null);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
@@ -65,6 +89,7 @@ export default function App() {
     composer.addPass(new OutputPass());
 
     const world = buildStartingPlace(scene);
+    world.waveTrack.setCollectedRewards(profileRef.current.collectedRewards);
     bikeRef.current = world.player;
     worldRef.current = world;
     const keys = createInputState();
@@ -72,6 +97,12 @@ export default function App() {
     let room = null;
     let cancelled = false;
     let lastPresenceSend = 0;
+    let speedGainRemainder = 0;
+    let speedProgress = profileRef.current.speed;
+    let levelProgress = profileRef.current.levelProgress;
+    let riderLevel = profileRef.current.level;
+    let lastTrainingPad = null;
+    let respawnFreezeUntil = 0;
 
     joinStartingPlace({
       onStatus: (status) => { if (!cancelled) setPresence((current) => ({ ...current, status })); },
@@ -115,9 +146,78 @@ export default function App() {
       if (!active) return;
       const delta = Math.min((now - previous) / 1000, 0.05);
       previous = now;
-      updateMovement(world.player, keys, delta, world.collision);
+      const previousX = world.player.position.x;
+      const previousZ = world.player.position.z;
+      if (now >= respawnFreezeUntil) {
+        updateMovement(world.player, keys, delta, world.collision);
+      } else {
+        world.player.position.set(0, 0, 0);
+        world.player.rotation.set(0, 0, 0);
+        keys.w = false;
+        keys.a = false;
+        keys.s = false;
+        keys.d = false;
+        keys.space = false;
+      }
+      const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
+      const overlappingPad = checkBoostPadOverlap(world.boostPads, world.player.position);
+      const trainingPad = overlappingPad && world.player.userData.grounded && world.player.position.y < 0.8
+        ? overlappingPad
+        : null;
+      const trainingMultiplier = trainingPad?.multiplier ?? 0;
+      const trainingRate = (world.player.userData.moveSpeed || 9) * trainingMultiplier;
+      speedGainRemainder += trainingPad ? trainingRate * delta : movedDistance;
+      const wheelDistance = keys.s && !keys.w ? -movedDistance : movedDistance;
+      world.player.userData.spinWheels?.(trainingPad ? 0 : wheelDistance, delta, trainingMultiplier);
+
+      if (trainingPad !== lastTrainingPad) {
+        lastTrainingPad = trainingPad;
+        if (trainingPad) setNotice({ id: Date.now(), text: `${trainingPad.label} training active! Wheels spinning for a ${trainingPad.multiplier}x speed boost.` });
+      }
+
+      const reward = world.player.userData.grounded ? world.waveTrack.rewardAt(world.player.position) : null;
+      if (reward && world.waveTrack.collectReward(reward.id)) {
+        respawnFreezeUntil = now + 3000;
+        const totalWins = profileRef.current.wins + reward.wins;
+        setProfile((current) => ({
+          ...current,
+          wins: current.wins + reward.wins,
+          collectedRewards: [...current.collectedRewards, reward.id],
+        }));
+        setCelebration({ id: Date.now(), rewardWins: reward.wins, totalWins });
+        world.player.position.set(0, 0, 0);
+        world.player.rotation.set(0, 0, 0);
+        world.player.userData.grounded = true;
+        world.player.userData.jumpVelocity = 0;
+        keys.w = false;
+        keys.a = false;
+        keys.s = false;
+        keys.d = false;
+        keys.space = false;
+      }
+
+      const earnedSpeed = Math.floor(speedGainRemainder);
+      if (earnedSpeed > 0) {
+        speedGainRemainder -= earnedSpeed;
+        speedProgress += earnedSpeed;
+        const levelTotal = levelProgress + earnedSpeed;
+        const levelsGained = Math.floor(levelTotal / 100);
+        riderLevel += levelsGained;
+        levelProgress = levelTotal % 100;
+        setProfile((current) => ({ ...current, speed: speedProgress, level: riderLevel, levelProgress }));
+        if (levelsGained > 0) {
+          setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });
+        }
+      }
       updateChaseCamera(camera, world.player);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike));
+      if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
+        world.player.position.set(0, 0, 0);
+        world.player.rotation.set(0, 0, 0);
+        world.player.userData.grounded = true;
+        world.player.userData.jumpVelocity = 0;
+        setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
+      }
       const currentZone = world.zoneAt(world.player.position);
       if (currentZone !== lastZone) {
         lastZone = currentZone;
@@ -162,8 +262,20 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(profile));
+    const { wins, finishes, selectedBike, collectedRewards } = profile;
+    localStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike, collectedRewards }));
+    sessionStorage.setItem(SESSION_PROGRESS_KEY, JSON.stringify({
+      speed: profile.speed,
+      level: profile.level,
+      levelProgress: profile.levelProgress,
+    }));
   }, [profile]);
+
+  useEffect(() => {
+    if (!celebration) return undefined;
+    const timer = setTimeout(() => setCelebration(null), 3000);
+    return () => clearTimeout(timer);
+  }, [celebration]);
 
   useEffect(() => {
     const bike = BIKES.find((item) => item.id === profile.selectedBike);
@@ -173,6 +285,14 @@ export default function App() {
     }
     if (bike) setCustomSpeed(bike.speed);
   }, [profile.selectedBike]);
+
+  useEffect(() => {
+    if (!bikeRef.current) return;
+    // Every level adds a little drive speed and raises the jump arc. Cap both
+    // bonuses so long-term progression stays playable.
+    bikeRef.current.userData.moveSpeed = effectiveBikeSpeed(customSpeed, profile.speed, profile.level);
+    bikeRef.current.userData.jumpSpeed = Math.min(12, 6 + (profile.level - 1) * 0.2);
+  }, [customSpeed, profile.speed, profile.level]);
 
   const selectBike = (bike) => {
     if (!isBikeUnlocked(bike, profile)) return;
@@ -199,19 +319,11 @@ export default function App() {
     });
   }, [profile]);
 
-  const collectSpeed = (amount) => {
-    setSpeed((current) => current + amount);
-    const progressGain = Math.max(1, Math.floor(amount / 100_000));
-    setLevelProgress((current) => {
-      const total = current + progressGain;
-      if (total >= 100) setLevel((currentLevel) => currentLevel + Math.floor(total / 100));
-      return total % 100;
-    });
-  };
-
   const changeCustomSpeed = (value) => {
     setCustomSpeed(value);
-    if (bikeRef.current) bikeRef.current.userData.moveSpeed = value;
+    if (bikeRef.current) {
+      bikeRef.current.userData.moveSpeed = effectiveBikeSpeed(value, profileRef.current.speed, profileRef.current.level);
+    }
   };
 
   return (
@@ -222,15 +334,14 @@ export default function App() {
         wins={profile.wins}
         finishes={profile.finishes}
         notice={notice}
+        celebration={celebration}
         zone={zone}
         onWavesChange={(disabled) => worldRef.current?.setWavesEnabled(!disabled)}
         selectedBike={profile.selectedBike}
         onSelectBike={selectBike}
-        onEarnWin={() => setProfile((current) => ({ ...current, wins: current.wins + 1 }))}
-        speed={speed}
-        onCollectSpeed={collectSpeed}
-        level={level}
-        levelProgress={levelProgress}
+        speed={profile.speed}
+        level={profile.level}
+        levelProgress={profile.levelProgress}
         customSpeed={customSpeed}
         onCustomSpeed={changeCustomSpeed}
       />

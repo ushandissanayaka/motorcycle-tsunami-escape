@@ -81,10 +81,22 @@ export function buildStartingPlace(scene) {
   // The wave place fills the corridor to the north.
   const waveTrack = createWaveTrack({ x0: -CORRIDOR.halfWidth, x1: CORRIDOR.halfWidth, zStart: ROOM.north, ...WAVE_TRACK });
   scene.add(waveTrack.group);
-  const collision = createCollision([...store.solids, ...stage.solids, ...waveTrack.solids]);
+  const trainingSurfaces = boostPads.flatMap((board) => board.userData.surfaces);
+  const collision = createCollision(
+    [...store.solids, ...stage.solids, ...waveTrack.solids],
+    waveTrack.pits,
+    [...trainingSurfaces, ...waveTrack.surfaces]
+  );
+  let knownWaveSolids = waveTrack.solids.length;
 
   // Sea beyond the open end of the corridor; the tsunami rolls in from far out on it.
-  const tsunami = createTsunami({ seaFromZ: CORRIDOR.north - 8, zFar: CORRIDOR.north - 300, zNear: ROOM.north + 2 });
+  // Keep the distant sea below the pit floors so the gray trench remains dry and visible.
+  const tsunami = createTsunami({
+    width: CORRIDOR.halfWidth * 2 + 10,
+    zFar: CORRIDOR.north - 300,
+    zNear: ROOM.north + 2,
+    seaLevel: -WAVE_TRACK.pitDepth - 0.8,
+  });
   scene.add(tsunami.group);
 
   const billboard = createEventBillboard();
@@ -98,11 +110,17 @@ export function buildStartingPlace(scene) {
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
   const update = (time, onStorePad) => {
+    waveTrack.ensureAhead(player.position.z);
+    if (waveTrack.solids.length > knownWaveSolids) {
+      collision.solids.push(...waveTrack.solids.slice(knownWaveSolids));
+      knownWaveSolids = waveTrack.solids.length;
+    }
     boostPads.forEach((board) => board.userData.update(time));
     store.update(time, player, onStorePad);
     display.update(time);
     stage.update(time);
-    tsunami.update(time);
+    waveTrack.update(time);
+    tsunami.update(time, player.position.z);
     sky.userData.update(time);
     lights.followRider(player.position);
   };
@@ -110,7 +128,7 @@ export function buildStartingPlace(scene) {
   /** Which titled area the rider is in, if any. */
   const zoneAt = (position) => (position.z > LUCKY_ZONE.minZ && Math.abs(position.x) < LUCKY_ZONE.halfWidth ? 'lucky' : null);
 
-  return { player, boostPads, store, collision, update, zoneAt, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
+  return { player, boostPads, store, collision, update, zoneAt, waveTrack, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
 }
 
 const SUN_OFFSET = new THREE.Vector3(-30, 55, 30);
@@ -175,15 +193,22 @@ function makeMaterials() {
 
 function addGround(scene, { grass, plaza, floor }) {
 
-  // Wide enough to sit under the wall everywhere, but it stops just past the corridor's open far end
-  // so that looking straight down the wave place shows sky instead of more land.
-  const zMax = ROOM.south + 60;
-  const zMin = CORRIDOR.north - 8;
-  const ground = new THREE.Mesh(applyWorldUV(new THREE.PlaneGeometry(320, zMax - zMin), TILE), grass);
-  ground.position.z = (zMax + zMin) / 2;
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
+  // Land only inside the canyon ring: the sea (see Tsunami.js) surrounds it, so the water shows outside the walls.
+  // The ground runs a little under the wall (walls start up to 4 units out) so no water slips in between.
+  // The corridor is cut out: the wave place builds its own floor there, and its pits drop below ground level.
+  const UNDER_WALL = 5;
+  const groundPiece = (x0, x1, z0, z1) => {
+    // Built in world coordinates (the plane is rotated flat, so its local y is world -z) so the stud texture lines up across pieces.
+    const geometry = new THREE.PlaneGeometry(x1 - x0, z1 - z0).translate((x0 + x1) / 2, -(z0 + z1) / 2, 0);
+    const mesh = new THREE.Mesh(applyWorldUV(geometry, TILE), grass);
+    mesh.rotation.x = -Math.PI / 2;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+  };
+  const roomX = ROOM.halfWidth + UNDER_WALL;
+  groundPiece(-roomX, roomX, ROOM.north, ROOM.south + UNDER_WALL); // the room
+  groundPiece(-roomX, -CORRIDOR.halfWidth, ROOM.north - UNDER_WALL, ROOM.north); // under the north wall, left of the corridor
+  groundPiece(CORRIDOR.halfWidth, roomX, ROOM.north - UNDER_WALL, ROOM.north); // ...and right of it
 
   // Plazas beside the road.
   scene.add(slab(PLAZA_WEST, plaza, 0.06, 0.12, PLAZA_TILE));

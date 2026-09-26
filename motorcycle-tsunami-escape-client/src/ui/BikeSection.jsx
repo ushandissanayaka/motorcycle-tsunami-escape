@@ -1,7 +1,7 @@
 import React from 'react';
 import { isBikeUnlocked, requirementText, stepText } from '../shared/constants.js';
 
-export default function BikeSection({ bikes, wins, finishes = 0, selectedBike, onSelect, onEarnWin }) {
+export default function BikeSection({ bikes, wins, finishes = 0, selectedBike, onSelect }) {
   return (
     <aside className="bike-panel">
       <div className="panel-heading">
@@ -30,7 +30,6 @@ export default function BikeSection({ bikes, wins, finishes = 0, selectedBike, o
         })}
       </div>
       <div className="garage-footer"><span className="online-dot" /> Unlock bikes with wins and finishes</div>
-      {onEarnWin && <button className="demo-win-button" onClick={onEarnWin}>PRACTICE: +1 WIN</button>}
     </aside>
   );
 }

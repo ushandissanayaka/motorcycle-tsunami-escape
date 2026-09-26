@@ -298,6 +298,23 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
     positions.needsUpdate = true;
   };
 
-  group.userData = { type: 'boostPad', multiplier, label, halfSize: { x: L / 2, z: W / 2 }, update };
+  group.userData = {
+    type: 'boostPad',
+    multiplier,
+    label,
+    halfSize: { x: L / 2, z: W / 2 },
+    // Add rideable deck and ramp tops to the movement support map.
+    surfaces: [
+      { minX: position.x - L / 2, maxX: position.x + L / 2, minZ: position.z - W / 2, maxZ: position.z + W / 2, top: DECK_TOP },
+      {
+        minX: position.x - L / 2 - 1.32,
+        maxX: position.x - L / 2 + 0.08,
+        minZ: position.z - W / 2,
+        maxZ: position.z + W / 2,
+        top: (x) => THREE.MathUtils.clamp((x - (position.x - L / 2 - 1.32)) / 1.4, 0, 1) * DECK_TOP,
+      },
+    ],
+    update,
+  };
   return group;
 }

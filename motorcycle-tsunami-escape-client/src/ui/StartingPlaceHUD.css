@@ -49,7 +49,6 @@
 .garage-popover .bike-card { height: 58px; }
 .garage-popover .bike-art { height: 42px; }
 .garage-close { position: absolute; z-index: 2; top: 7px; right: 7px; width: 25px; height: 25px; border: 2px solid #111827; border-radius: 50%; background: #ff5158; color: white; font-size: 11px !important; font-weight: 1000; }
-.demo-win-button { width: 100%; margin-top: 8px; padding: 8px; border: 2px solid #111827; border-radius: 8px; background: #a9ed44; color: #17220f; font-size: 10px !important; font-weight: 1000; }
 
 .reward-buttons { position: absolute; top: 5px; right: 8px; display: flex; align-items: flex-start; gap: 5px; pointer-events: auto; }
 .reward-buttons button { display: flex; flex-direction: column; align-items: center; border: 0; background: transparent; color: white; font-size: 11px; font-weight: 900; text-shadow: -1px -1px #111, 1px 1px #111; cursor: pointer; }
@@ -80,12 +79,20 @@
 .level-meter strong, .level-meter span { position: absolute; top: 50%; transform: translateY(-50%); font-size: 22px; font-weight: 1000; text-shadow: -2px -2px #101725, 2px 2px #101725; }
 .level-meter strong { left: 13px; }
 .level-meter span { right: 13px; }
-.pickup-row { position: absolute; bottom: 25px; left: 50%; display: flex; gap: 9px; transform: translateX(-50%); pointer-events: auto; }
-.pickup-row button { min-width: 175px; min-height: 52px; border: 4px solid #111827; border-radius: 10px; background: linear-gradient(#ffe442,#f4a000); color: white; font-size: 22px !important; font-weight: 1000; text-shadow: -2px -2px #101725, 2px 2px #101725; box-shadow: 0 4px #111827; cursor: pointer; }
-.pickup-row button span { margin-right: 5px; font-size: 24px; }
 .drive-hint { position: absolute; bottom: 7px; left: 11px; color: white; font-size: 10px; text-shadow: 0 1px 4px #000; }
 .drive-hint b { margin-right: 4px; padding: 3px 5px; border: 1px solid #ffffff55; border-radius: 4px; background: #172333c9; }
 .game-toast { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); padding: 13px 22px; border: 3px solid #111827; border-radius: 12px; background: #182536ed; color: white; font-size: 14px; font-weight: 800; text-align: center; box-shadow: 0 8px 25px #0008; }
+.win-celebration { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at center, #30235dcc, #090d20d9 72%); pointer-events: none; animation: celebration-in 260ms ease-out both; }
+.celebration-card { display: flex; width: min(460px, 84vw); flex-direction: column; align-items: center; gap: 8px; padding: 28px 24px; border: 5px solid #ffd837; border-radius: 24px; background: linear-gradient(155deg, #6624b9f5, #171b55f5 68%, #a52c76f5); color: #fff; text-align: center; box-shadow: 0 0 0 5px #24123c, 0 0 55px #ffe14dcc; animation: celebration-pop 520ms cubic-bezier(.18,.88,.34,1.25) both; }
+.celebration-trophy { font-size: 76px; line-height: 1; filter: drop-shadow(0 5px 0 #9c6200); }
+.celebration-card small { color: #ffe987; font-size: 13px; font-weight: 1000; letter-spacing: 3px; }
+.celebration-card strong { color: #fff12e; font-size: clamp(38px, 8vw, 68px); font-weight: 1000; text-shadow: 4px 5px #402109, 0 0 18px #ffb900; }
+.celebration-total { padding: 7px 15px; border: 2px solid #ffffff66; border-radius: 999px; background: #101638aa; font-size: 17px; font-weight: 1000; }
+.celebration-card b { margin-top: 7px; color: #baf6ff; font-size: 11px; letter-spacing: 2px; }
+.celebration-confetti { position: absolute; top: 9%; color: #ffdb3d; font-size: clamp(28px, 6vw, 56px); letter-spacing: 3vw; white-space: nowrap; text-shadow: 0 0 18px #ffdf48; animation: celebration-float 900ms ease-in-out infinite alternate; }
+@keyframes celebration-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes celebration-pop { from { opacity: 0; transform: scale(.55) rotate(-5deg); } to { opacity: 1; transform: scale(1) rotate(0); } }
+@keyframes celebration-float { from { transform: translateY(-7px) rotate(-2deg); } to { transform: translateY(12px) rotate(2deg); } }
 
 @media (max-width: 900px) {
   .center-game-title { top: 62px; width: 55vw; }
@@ -102,8 +109,6 @@
   .right-utility-row .action-tile { height: 75px; }
   .speed-readout { bottom: 147px; }
   .level-meter { bottom: 95px; }
-  .pickup-row { bottom: 16px; }
-  .pickup-row button { min-width: 130px; min-height: 43px; font-size: 17px !important; }
   .garage-popover { top: 186px; left: 252px; width: 310px; }
 }
 
@@ -154,9 +159,6 @@
   .speed-readout small { font-size: 6px; }
   .level-meter { bottom: 78px; width: 72vw; height: 34px; border-width: 3px; }
   .level-meter strong, .level-meter span { font-size: 15px; }
-  .pickup-row { bottom: 16px; gap: 4px; }
-  .pickup-row button { min-width: 0; min-height: 36px; padding: 0 6px; border-width: 2px; font-size: 12px !important; }
-  .pickup-row button span { margin-right: 2px; font-size: 14px; }
   .drive-hint { display: none; }
   .garage-popover { top: auto; right: 8px; bottom: 55px; left: 174px; width: auto; padding: 4px; }
   .garage-popover .bike-panel { padding: 5px; }

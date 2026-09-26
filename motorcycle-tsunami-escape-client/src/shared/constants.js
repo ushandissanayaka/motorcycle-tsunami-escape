@@ -1,13 +1,19 @@
 /**
- * The wave place: raised black slabs separated by grey hollows. Every hollow is
- * `gapGrowth` longer than the one before it, so the jumps get harder.
+ * The wave place: black slabs level with the road, separated by deep grey pits.
+ * Every pit is `gapGrowth` longer than the one before it, so the jumps get harder,
+ * and every slab is `slabGrowth` longer than the one before it, so the pits get
+ * further apart. `pitDepth` is more than a bike can drive up out of, but a jump clears it.
  */
-export const WAVE_TRACK = { slabs: 8, slabLength: 10, firstGap: 2.5, gapGrowth: 1.5, slabHeight: 0.6 };
+// Pits drop below the tsunami's ground-level base, leaving room for the rider
+// and bike to shelter underneath it while it crosses the track.
+// 2.8 units puts the pit floor below the 2.4-unit rider head height, with
+// extra clearance so a rider tucked into a gap stays under the tsunami.
+export const WAVE_TRACK = { slabs: 8, slabLength: 10, slabGrowth: 2, firstGap: 2.5, gapGrowth: 1.5, pitDepth: 2.8 };
 
 /** Length of the whole wave place, first slab to last. */
-export function waveTrackLength({ slabs, slabLength, firstGap, gapGrowth }) {
-  const gaps = Array.from({ length: slabs - 1 }, (_, i) => firstGap + gapGrowth * i);
-  return slabs * slabLength + gaps.reduce((sum, gap) => sum + gap, 0);
+export function waveTrackLength({ slabs, slabLength, slabGrowth, firstGap, gapGrowth }) {
+  const sum = (count, f) => Array.from({ length: count }, (_, i) => f(i)).reduce((a, b) => a + b, 0);
+  return sum(slabs, (i) => slabLength + slabGrowth * i) + sum(slabs - 1, (i) => firstGap + gapGrowth * i);
 }
 
 const ROOM_NORTH = -38;
@@ -20,7 +26,7 @@ const ROOM_NORTH = -38;
  */
 export const MAP_LAYOUT = {
   room: { halfWidth: 50, north: ROOM_NORTH, south: 30, southMargin: 3 }, // southMargin: riders may drive up to the Lucky Blocks stage
-  corridor: { halfWidth: 19, north: ROOM_NORTH - waveTrackLength(WAVE_TRACK), sideMargin: 2 }, // sideMargin: the wave track runs almost wall to wall
+  corridor: { halfWidth: 25, north: ROOM_NORTH - waveTrackLength(WAVE_TRACK), sideMargin: 2 }, // widened wave course for broader slabs and pits
 };
 
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
@@ -31,7 +37,8 @@ export function clampToMap(x, z, margin = 7) {
   const inRoom = { x: clamp(x, -room.halfWidth + margin, room.halfWidth - margin), z: clamp(z, room.north + margin, room.south - room.southMargin) };
   const inCorridor = {
     x: clamp(x, -corridor.halfWidth + corridor.sideMargin, corridor.halfWidth - corridor.sideMargin),
-    z: clamp(z, corridor.north + margin, room.north + margin),
+    // The wave corridor continues as the rider advances; only its entrance is fixed.
+    z: Math.min(z, room.north + margin),
   };
   const distance = (p) => (p.x - x) ** 2 + (p.z - z) ** 2;
   return distance(inRoom) <= distance(inCorridor) ? inRoom : inCorridor;

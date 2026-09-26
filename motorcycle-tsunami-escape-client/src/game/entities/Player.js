@@ -19,6 +19,8 @@ export function createPlayer() {
   group.add(rider);
 
   group.userData.setBikeColor = (color) => bike.userData.setColor(color);
+  group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>
+    bike.userData.spinWheels(distance, deltaSeconds, trainingMultiplier);
 
   return group;
 }

@@ -1,8 +1,5 @@
 /** Rectangular overlap check against each training board's deck footprint
- * (`userData.halfSize`). `onEnter(multiplier)` wiring is up to the caller —
- * hook it to economy XP gain on the client's local state, or send a 'boost'
- * message to the server room if you want it authoritative. Swap for a physics
- * engine (cannon-es, rapier) once you have more than a handful of triggers. */
+ * (`userData.halfSize`). Returns the board data, including its speed multiplier. */
 export function checkBoostPadOverlap(pads, playerPosition) {
   for (const pad of pads) {
     const { halfSize } = pad.userData;

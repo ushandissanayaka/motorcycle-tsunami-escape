@@ -11,7 +11,7 @@ npm run dev
 
 Start the backend in a second terminal with `cd ../motorcycle-tsunami-escape-server` and `npm install && npm run dev`. The client connects to `ws://localhost:2567` by default; set `VITE_SERVER_WS_URL` in the client `.env` to change it.
 
-Use **W/A/S/D** to ride, **Space** to hop, and the bike cards to select bikes you have unlocked. The **+1 WIN** control is a temporary local progression control for previewing the garage; the race and win-award loop will be built in a later step.
+Use **W/A/S/D** to ride, **Space** to hop, and the bike cards to select bikes you have unlocked. Every wave-track pit has a narrow, long red mat on the left and yellow mat on the right, each with one large hovering trophy and a win label. Ride over one to collect its wins, see a celebration, and return to the hub. The first pit awards +2 on red and +3 on yellow; each later pit adds two wins to both colors. Collected rewards and wins are saved in this browser.
 
 The optional Bloxity SDK is initialized when its portal script is available. Portal lifecycle signals are sent when supported; local play does not depend on the SDK. The Colyseus connection is also optional, so the game remains playable if the backend is unavailable.
 

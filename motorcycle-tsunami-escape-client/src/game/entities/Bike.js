@@ -110,6 +110,15 @@ export function createBike(color = DEFAULT_COLOR) {
   const rear = createRearWheel(bodyMaterial, glowMaterial, navyMaterial);
   rear.position.set(0, REAR.r, REAR.z);
   bike.add(front, rear);
+  bike.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier = 0) => {
+    // Match tire roll to distance on the road. Training boards spin the wheels
+    // in place, with faster rotation on higher-multiplier boards.
+    const radians = trainingMultiplier > 0
+      ? deltaSeconds * Math.min(18 + trainingMultiplier * 2, 120)
+      : distance / FRONT.r;
+    front.rotation.x += radians;
+    rear.rotation.x += radians;
+  };
 
   // One rounded blue body between the wheels: a bulbous crescent that swells into a hump over
   // the rear and dips into a seat, with a dark strip along the top.

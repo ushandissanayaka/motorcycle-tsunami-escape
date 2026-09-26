@@ -1,0 +1,171 @@
+.starting-hud { position: absolute; inset: 0; color: #fff; pointer-events: none; }
+.starting-hud button, .starting-hud input { pointer-events: auto; font: inherit; }
+.top-toolbar { position: absolute; top: 8px; left: 8px; display: flex; gap: 7px; align-items: center; pointer-events: auto; }
+.toolbar-square, .toolbar-pill { min-height: 44px; border: 2px solid #111827; border-radius: 13px; background: #19212d; color: #fff; box-shadow: 0 3px 0 #05070b; cursor: pointer; }
+.toolbar-square { display: grid; width: 45px; place-content: center; font-size: 19px; font-weight: 1000; }
+.brand-square { transform: rotate(-8deg); border-color: #070a10; background: linear-gradient(145deg,#fff,#c9d5e5); color: #101723; }
+.menu-square { gap: 4px; }
+.menu-square span { display: block; width: 18px; height: 2px; border-radius: 2px; background: #fff; }
+.toolbar-pill { padding: 0 14px; border-radius: 24px; font-size: 13px; font-weight: 800; }
+.toolbar-pill b { margin-left: 3px; color: #baff5d; font-size: 9px; }
+.invite-pill span { margin-right: 5px; }
+
+
+
+.center-game-title { position: absolute; top: 41px; left: 50%; width: min(720px, 46vw); transform: translateX(-50%); text-align: center; color: #fff; text-shadow: -3px -3px #111a2a, 3px -3px #111a2a, -3px 3px #111a2a, 3px 3px #111a2a, 0 5px #101522; }
+.game-title-main { font-size: clamp(34px, 4vw, 68px); font-weight: 1000; letter-spacing: 1px; line-height: .9; -webkit-text-stroke: 2px #131a28; }
+.game-title-sub { margin-top: 10px; color: #ffe522; font-size: clamp(17px, 2vw, 30px); font-weight: 1000; letter-spacing: .3px; -webkit-text-stroke: 1px #131a28; }
+
+.event-card { position: absolute; top: 62px; left: 10px; display: flex; width: 292px; min-height: 108px; align-items: center; gap: 10px; padding: 9px; border: 3px solid #101725; border-radius: 12px; background: linear-gradient(135deg,#ffce35,#ff8f25); color: #fff; box-shadow: 0 4px 0 #0b1020; text-shadow: 0 2px 2px #171b27; pointer-events: auto; }
+.event-art { display: grid; width: 78px; height: 77px; flex: 0 0 78px; place-content: center; border: 2px solid #111a29; border-radius: 8px; background: linear-gradient(145deg,#25d9e4,#1693d7); text-align: center; }
+.event-art span { font-size: 32px; line-height: 1; }
+.event-art b { font-size: 9px; line-height: 1; }
+.event-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; }
+.event-kicker { color: #fff8be; font-size: 8px; font-weight: 1000; letter-spacing: .5px; }
+.event-copy strong { font-size: 13px; }
+.event-copy small { font-size: 9px; line-height: 1.25; }
+.event-card > button { position: absolute; right: 8px; bottom: 6px; border: 1px solid #0e1b30; border-radius: 5px; background: #263d66; color: white; font-size: 8px !important; font-weight: 900; }
+
+.top-stats { position: absolute; top: 183px; left: 10px; display: flex; gap: 8px; }
+.stat-chip { display: flex; min-width: 106px; height: 40px; align-items: center; gap: 6px; padding: 5px 9px; border: 3px solid #101725; border-radius: 9px; background: linear-gradient(#ffd946,#f29e00); color: #fff; text-shadow: -1px -1px #111, 2px 2px #111; box-shadow: 0 3px #111827; }
+.stat-chip > span { font-size: 21px; }
+.stat-chip strong { font-size: 18px; }
+.stat-chip small { align-self: end; margin: 0 0 3px auto; font-size: 8px; font-weight: 1000; }
+.bux-chip { min-width: 80px; background: linear-gradient(#65d8fa,#2089d2); }
+.bux-chip > span { display: grid; width: 21px; height: 21px; place-content: center; border-radius: 50%; background: #ffe24a; color: #22416c; font-size: 13px; font-weight: 1000; }
+
+.left-action-grid { position: absolute; top: 235px; left: 10px; display: grid; width: 286px; grid-template-columns: repeat(2, 1fr); gap: 9px; pointer-events: auto; }
+.action-tile { position: relative; display: flex; min-width: 0; height: 105px; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 6px; border: 4px solid #111827; border-radius: 12px; color: #fff; box-shadow: 0 4px 0 #101725, inset 0 0 0 1px #ffffff60; text-align: center; text-shadow: -2px -2px #111, 2px -2px #111, -2px 2px #111, 2px 2px #111; cursor: pointer; }
+.action-icon { display: grid; height: 51px; place-content: center; font-size: 39px; filter: drop-shadow(0 2px 1px #1118); }
+.action-tile strong { font-size: 19px; font-weight: 1000; line-height: 1; }
+.action-tile small { position: absolute; top: -8px; right: -5px; padding: 2px 5px; border: 2px solid #101725; border-radius: 7px; background: #ff494e; font-size: 8px; font-weight: 1000; }
+.tile-yellow { background: linear-gradient(145deg,#ffe327,#f5a000); }
+.tile-blue { background: linear-gradient(145deg,#65e4ff,#1687dc); }
+.tile-purple { background: linear-gradient(145deg,#df77ff,#752de3); }
+.tile-green { background: linear-gradient(145deg,#8cff32,#35b923); }
+.tile-orange { background: linear-gradient(145deg,#ffda42,#ed8700); }
+.garage-popover { position: absolute; z-index: 5; top: 198px; left: 310px; width: 330px; padding: 9px; border: 3px solid #111827; border-radius: 17px; background: #151e2beF; box-shadow: 0 8px 24px #0008; pointer-events: auto; }
+.garage-popover .bike-panel { position: static; width: 100%; padding: 10px; transform: none; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
+.garage-popover .bike-card { height: 58px; }
+.garage-popover .bike-art { height: 42px; }
+.garage-close { position: absolute; z-index: 2; top: 7px; right: 7px; width: 25px; height: 25px; border: 2px solid #111827; border-radius: 50%; background: #ff5158; color: white; font-size: 11px !important; font-weight: 1000; }
+.demo-win-button { width: 100%; margin-top: 8px; padding: 8px; border: 2px solid #111827; border-radius: 8px; background: #a9ed44; color: #17220f; font-size: 10px !important; font-weight: 1000; }
+
+.reward-buttons { position: absolute; top: 5px; right: 8px; display: flex; align-items: flex-start; gap: 5px; pointer-events: auto; }
+.reward-buttons button { display: flex; flex-direction: column; align-items: center; border: 0; background: transparent; color: white; font-size: 11px; font-weight: 900; text-shadow: -1px -1px #111, 1px 1px #111; cursor: pointer; }
+.reward-buttons span { display: grid; width: 49px; height: 48px; place-content: center; border: 3px solid #131a28; border-radius: 10px; background: linear-gradient(145deg,#fff18c,#ffad22); font-size: 29px; }
+.reward-wheel span { border-radius: 50%; background: conic-gradient(#f42c72,#ffd52b,#42d6ff,#8855ff,#f42c72); }
+
+.right-game-panel { position: absolute; top: 106px; right: 12px; display: flex; width: 270px; flex-direction: column; gap: 9px; align-items: stretch; pointer-events: auto; }
+.bux-ribbon { align-self: flex-end; padding: 5px 12px; border: 3px solid #111827; border-radius: 9px; background: linear-gradient(#fff04d,#f5a300); color: #fff; font-size: 17px; font-weight: 1000; text-shadow: -2px -2px #111, 2px 2px #111; }
+.waves-button { min-height: 48px; border: 4px solid #101725; border-radius: 10px; background: linear-gradient(#ff777b,#ef272e); color: white; font-size: 19px !important; font-weight: 1000; text-shadow: -2px -2px #111, 2px 2px #111; box-shadow: 0 4px #111827; }
+.waves-button.turned-off { background: linear-gradient(#63df7e,#1c9b4c); }
+.custom-speed-card { padding: 9px 12px; border: 3px solid #111827; border-radius: 10px; background: #162333e8; color: white; text-align: center; text-shadow: 0 2px #111; }
+.custom-speed-card label { font-size: 19px; font-weight: 1000; }
+.custom-speed-card input { display: block; width: 100%; margin: 8px 0 2px; accent-color: #20c7ff; }
+.speed-slider-value { display: flex; justify-content: space-between; font-size: 25px; font-weight: 1000; }
+.speed-slider-value small { align-self: center; font-size: 10px; }
+.double-speed-button { min-height: 67px; border: 4px solid #111827; border-radius: 11px; background: linear-gradient(145deg,#47ed4b,#08ad2d); color: #fff; font-size: 26px !important; font-weight: 1000; text-shadow: -2px -2px #111, 2px -2px #111, -2px 2px #111, 2px 2px #111; box-shadow: 0 4px #111827; }
+.double-speed-button.active { background: linear-gradient(145deg,#ffe74e,#fa9500); }
+.double-speed-button small { display: block; font-size: 8px; letter-spacing: 1px; }
+.right-utility-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.right-utility-row .action-tile { height: 92px; }
+.right-utility-row .action-icon { height: 42px; font-size: 32px; }
+
+.speed-readout { position: absolute; bottom: 164px; left: 50%; display: flex; flex-direction: column; align-items: center; transform: translateX(-50%); color: #fff; text-align: center; text-shadow: -3px -3px #101725, 3px -3px #101725, -3px 3px #101725, 3px 3px #101725; }
+.speed-readout strong { font-size: 30px; font-weight: 1000; }
+.speed-readout small { font-size: 8px; font-weight: 900; letter-spacing: 2px; }
+.level-meter { position: absolute; bottom: 105px; left: 50%; width: min(700px, 60vw); height: 49px; transform: translateX(-50%); overflow: hidden; border: 4px solid #111827; border-radius: 11px; background: #e8e9e7; color: #fff; box-shadow: 0 4px #111827; }
+.level-fill { position: absolute; inset: 0 auto 0 0; background: linear-gradient(#42d7ff,#1889e3); }
+.level-meter strong, .level-meter span { position: absolute; top: 50%; transform: translateY(-50%); font-size: 22px; font-weight: 1000; text-shadow: -2px -2px #101725, 2px 2px #101725; }
+.level-meter strong { left: 13px; }
+.level-meter span { right: 13px; }
+.pickup-row { position: absolute; bottom: 25px; left: 50%; display: flex; gap: 9px; transform: translateX(-50%); pointer-events: auto; }
+.pickup-row button { min-width: 175px; min-height: 52px; border: 4px solid #111827; border-radius: 10px; background: linear-gradient(#ffe442,#f4a000); color: white; font-size: 22px !important; font-weight: 1000; text-shadow: -2px -2px #101725, 2px 2px #101725; box-shadow: 0 4px #111827; cursor: pointer; }
+.pickup-row button span { margin-right: 5px; font-size: 24px; }
+.drive-hint { position: absolute; bottom: 7px; left: 11px; color: white; font-size: 10px; text-shadow: 0 1px 4px #000; }
+.drive-hint b { margin-right: 4px; padding: 3px 5px; border: 1px solid #ffffff55; border-radius: 4px; background: #172333c9; }
+.game-toast { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); padding: 13px 22px; border: 3px solid #111827; border-radius: 12px; background: #182536ed; color: white; font-size: 14px; font-weight: 800; text-align: center; box-shadow: 0 8px 25px #0008; }
+
+@media (max-width: 900px) {
+  .center-game-title { top: 62px; width: 55vw; }
+  .event-card { top: 53px; width: 235px; }
+  .event-art { width: 58px; flex-basis: 58px; }
+  .top-stats { top: 172px; }
+  .left-action-grid { top: 222px; width: 235px; gap: 6px; }
+  .action-tile { height: 82px; }
+  .action-icon { height: 38px; font-size: 30px; }
+  .action-tile strong { font-size: 15px; }
+  .right-game-panel { top: 142px; width: 220px; }
+  .custom-speed-card label { font-size: 15px; }
+  .double-speed-button { min-height: 53px; font-size: 21px !important; }
+  .right-utility-row .action-tile { height: 75px; }
+  .speed-readout { bottom: 147px; }
+  .level-meter { bottom: 95px; }
+  .pickup-row { bottom: 16px; }
+  .pickup-row button { min-width: 130px; min-height: 43px; font-size: 17px !important; }
+  .garage-popover { top: 186px; left: 252px; width: 310px; }
+}
+
+@media (max-width: 620px) {
+  .center-game-title { top: 170px; width: 100%; }
+  .game-title-main { font-size: 31px; }
+  .game-title-sub { margin-top: 5px; font-size: 17px; }
+  .top-toolbar { top: 6px; left: 6px; gap: 4px; }
+  .toolbar-square { width: 34px; min-height: 35px; }
+  .toolbar-pill { min-height: 35px; padding: 0 8px; font-size: 10px; }
+          .event-card { top: 51px; left: 8px; width: 175px; min-height: 71px; gap: 5px; padding: 5px; }
+  .event-art { width: 42px; height: 49px; flex-basis: 42px; }
+  .event-art span { font-size: 20px; }
+  .event-art b { font-size: 7px; }
+  .event-copy strong { font-size: 10px; }
+  .event-copy small { font-size: 7px; }
+  .event-kicker { font-size: 6px; }
+  .event-card > button { right: 3px; bottom: 2px; font-size: 6px !important; }
+  .top-stats { top: 129px; left: 8px; gap: 4px; }
+  .stat-chip { min-width: 77px; height: 31px; gap: 3px; padding: 3px 5px; border-width: 2px; }
+  .stat-chip > span { font-size: 15px; }
+  .stat-chip strong { font-size: 13px; }
+  .stat-chip small { font-size: 6px; }
+  .left-action-grid { top: 168px; left: 8px; width: 160px; gap: 5px; }
+  .action-tile { height: 61px; border-width: 3px; border-radius: 9px; }
+  .action-icon { height: 29px; font-size: 23px; }
+  .action-tile strong { font-size: 11px; }
+  .action-tile small { font-size: 6px; }
+  .right-game-panel { top: 190px; right: 8px; width: 150px; gap: 5px; }
+  .bux-ribbon { padding: 2px 7px; font-size: 12px; }
+  .waves-button { min-height: 33px; border-width: 3px; font-size: 12px !important; }
+  .custom-speed-card { padding: 5px; border-width: 2px; }
+  .custom-speed-card label { font-size: 11px; }
+  .custom-speed-card input { margin: 3px 0; }
+  .speed-slider-value { font-size: 16px; }
+  .speed-slider-value small { font-size: 7px; }
+  .double-speed-button { min-height: 40px; border-width: 3px; font-size: 16px !important; }
+  .double-speed-button small { font-size: 6px; }
+  .right-utility-row { gap: 5px; }
+  .right-utility-row .action-tile { height: 57px; }
+  .right-utility-row .action-icon { height: 27px; font-size: 22px; }
+  .reward-buttons { top: 5px; right: 5px; }
+  .reward-buttons span { width: 31px; height: 31px; border-width: 2px; font-size: 18px; }
+  .reward-buttons button { font-size: 7px; }
+  .reward-wheel { display: none !important; }
+  .speed-readout { bottom: 116px; }
+  .speed-readout strong { font-size: 19px; }
+  .speed-readout small { font-size: 6px; }
+  .level-meter { bottom: 78px; width: 72vw; height: 34px; border-width: 3px; }
+  .level-meter strong, .level-meter span { font-size: 15px; }
+  .pickup-row { bottom: 16px; gap: 4px; }
+  .pickup-row button { min-width: 0; min-height: 36px; padding: 0 6px; border-width: 2px; font-size: 12px !important; }
+  .pickup-row button span { margin-right: 2px; font-size: 14px; }
+  .drive-hint { display: none; }
+  .garage-popover { top: auto; right: 8px; bottom: 55px; left: 174px; width: auto; padding: 4px; }
+  .garage-popover .bike-panel { padding: 5px; }
+  .garage-popover .panel-heading h2 { font-size: 16px; }
+  .garage-popover .garage-copy { margin: 4px 0 7px; font-size: 9px; }
+  .garage-popover .bike-card { height: 44px; gap: 5px; padding: 4px; }
+  .garage-popover .bike-art { flex-basis: 37px; height: 34px; }
+  .garage-popover .bike-info strong { font-size: 9px; }
+  .garage-popover .bike-info small, .garage-popover .bike-state { font-size: 7px; }
+  .garage-popover .garage-footer { margin-top: 5px; font-size: 7px; }
+  .game-toast { width: 80vw; font-size: 11px; }
+}

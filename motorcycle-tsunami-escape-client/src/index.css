@@ -1,0 +1,79 @@
+:root {
+  font-family: Arial, system-ui, sans-serif;
+  color: #f5f8ff;
+  background: #10151f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+.app-root { position: relative; width: 100vw; height: 100vh; background: #9bdcff; }
+.game-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+.hud-overlay { position: absolute; inset: 0; pointer-events: none; }
+.hud-overlay button { pointer-events: auto; }
+
+.game-title { position: absolute; top: 26px; left: 30px; display: flex; align-items: center; gap: 12px; color: #132333; text-shadow: 0 2px #fff8; }
+.title-mark { display: grid; width: 52px; height: 48px; place-items: center; border-radius: 13px; background: #a7f044; color: #16251c; font-size: 24px; font-weight: 900; box-shadow: 0 4px #578526; }
+.game-title strong, .game-title small { display: block; font-weight: 900; line-height: .94; text-transform: uppercase; }
+.game-title strong { font-size: 27px; letter-spacing: .5px; }
+.game-title small { margin-top: 5px; font-size: 15px; letter-spacing: 2.6px; }
+.how-to { position: absolute; top: 88px; left: 30px; display: flex; flex-direction: column; gap: 4px; color: #fff; font-size: 12px; text-shadow: 0 1px 4px #152332; }
+.how-to b { color: #e6ffab; font-size: 10px; letter-spacing: 1.9px; }
+
+.bike-panel { position: absolute; top: 50%; left: 26px; width: 320px; padding: 19px; transform: translateY(-42%); border: 1px solid #ffffff38; border-radius: 20px; background: linear-gradient(145deg, #131d2bef, #182538ef); color: #f5f8ff; box-shadow: 0 20px 60px #09111b55, inset 0 1px #ffffff1c; pointer-events: auto; backdrop-filter: blur(12px); }
+.panel-heading { display: flex; align-items: center; justify-content: space-between; }
+.panel-kicker { color: #9cadc5; font-size: 9px; font-weight: 800; letter-spacing: 2px; }
+.panel-heading h2 { margin: 3px 0 0; font-size: 22px; letter-spacing: -.8px; }
+.garage-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 13px; background: #b6f44c; color: #172417; font-size: 22px; }
+.garage-copy { margin: 7px 0 14px; color: #a9b7ca; font-size: 11px; line-height: 1.5; }
+.bike-list { display: grid; gap: 8px; max-height: min(52vh, 480px); overflow-y: auto; padding-right: 4px; }
+.bike-card { display: flex; width: 100%; height: 67px; align-items: center; gap: 10px; padding: 8px; border: 1px solid #ffffff18; border-radius: 12px; background: #ffffff08; color: #f4f6fb; text-align: left; cursor: pointer; transition: .16s ease; }
+.bike-card:hover:not(:disabled) { transform: translateX(3px); background: #ffffff13; }
+.bike-card.selected { border-color: #b6f44c; background: #b6f44c12; box-shadow: inset 3px 0 #b6f44c; }
+.bike-card:disabled { opacity: .6; cursor: default; }
+.bike-art { position: relative; display: block; flex: 0 0 52px; height: 48px; overflow: hidden; border-radius: 9px; background: linear-gradient(145deg, #263a4e, #1a2938); }
+.bike-art i, .bike-art b { position: absolute; bottom: 10px; width: 15px; height: 15px; border: 3px solid #111a23; border-radius: 50%; background: #718196; }
+.bike-art i { left: 8px; }
+.bike-art b { right: 7px; }
+.bike-art em { position: absolute; top: 17px; left: 15px; width: 25px; height: 10px; transform: skew(-24deg); border-radius: 5px 9px 3px 3px; background: var(--bike-color, #38e878); box-shadow: 8px -6px 0 -2px #d7e0ed; }
+.bike-info { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.bike-info strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.bike-info small { color: #9eacc0; font-size: 10px; }
+.bike-state { color: #aab6c7; font-size: 8px; font-weight: 900; letter-spacing: .7px; }
+.selected .bike-state { color: #c6ff70; }
+.unlock-track { height: 3px; overflow: hidden; border-radius: 4px; background: #ffffff18; }
+.unlock-track i { display: block; height: 100%; background: #b6f44c; }
+.garage-footer { display: flex; align-items: center; gap: 7px; margin-top: 12px; color: #8797ad; font-size: 9px; }
+.online-dot { width: 6px; height: 6px; border-radius: 50%; background: #adf353; box-shadow: 0 0 9px #adf353; }
+
+.win-card { position: absolute; top: 26px; right: 28px; display: flex; align-items: center; gap: 10px; padding: 10px 13px; border: 1px solid #ffffff35; border-radius: 14px; background: #162234dd; color: white; box-shadow: 0 12px 35px #101c2d35; backdrop-filter: blur(10px); }
+.win-card > span { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: #ffd05c; font-size: 18px; }
+.win-card div { display: flex; min-width: 50px; flex-direction: column; gap: 1px; }
+.win-card small { color: #a8b6c9; font-size: 8px; font-weight: 800; letter-spacing: 1px; }
+.win-card strong { font-size: 18px; }
+.win-card button { margin-left: 5px; padding: 8px 11px; border: 0; border-radius: 9px; background: #b6f44c; color: #192517; font-size: 10px; font-weight: 900; cursor: pointer; }
+.presence-badge { position: absolute; top: 94px; right: 28px; display: flex; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid #ffffff35; border-radius: 9px; background: #182536d9; color: #e7edf6; font-size: 9px; font-weight: 800; letter-spacing: .6px; }
+.presence-badge i { width: 7px; height: 7px; border-radius: 50%; background: #a4b0c0; }
+.presence-badge.connected i { background: #a8f34d; box-shadow: 0 0 9px #a8f34d; }
+.presence-badge.connecting i { background: #ffd34d; }
+.presence-badge.offline i { background: #ff6c6c; }
+.controls-hint { position: absolute; right: 28px; bottom: 25px; display: flex; gap: 7px; }
+.controls-hint span { padding: 7px 10px; border: 1px solid #ffffff35; border-radius: 9px; background: #182536dc; color: white; font-size: 10px; font-weight: 800; }
+.controls-hint small { margin-left: 4px; color: #9aaac0; font-size: 8px; letter-spacing: .7px; }
+.hub-label { position: absolute; bottom: 28px; left: 50%; transform: translateX(-50%); color: #fff; font-size: 9px; font-weight: 900; letter-spacing: 2px; text-shadow: 0 2px 5px #152332; }
+.hub-label i { padding: 0 7px; color: #c5ff68; font-style: normal; }
+
+@media (max-width: 700px) {
+  .bike-panel { top: auto; bottom: 72px; left: 12px; width: min(300px, calc(100vw - 24px)); padding: 13px; transform: none; }
+  .bike-card { height: 58px; }
+  .bike-art { height: 42px; }
+  .how-to { top: 79px; left: 17px; max-width: 65vw; }
+  .game-title { top: 18px; left: 17px; }
+  .win-card { top: 16px; right: 12px; padding: 7px; }
+  .win-card > span { width: 30px; height: 30px; }
+  .presence-badge { top: 61px; right: 12px; }
+  .hub-label { display: none; }
+  .controls-hint { right: 12px; bottom: 16px; flex-direction: column; gap: 4px; }
+  .controls-hint span { padding: 6px 8px; }
+}

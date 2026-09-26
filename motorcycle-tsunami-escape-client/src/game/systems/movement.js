@@ -81,7 +81,7 @@ function stepVertical(target, dt, collision) {
 
 /** Free-roam hub movement: W/S drive forward/back, A/D turn, Space jumps. Pass a
  * `collision` (systems/collision.js) to ride up ramps, be stopped by walls and
- * drop into pits (and jump back out of them). Falling is integrated in every sub-step of the drive, so a
+ * drop into pits (and hop back out of them). Falling is integrated in every sub-step of the drive, so a
  * rider fast enough to cross a pit before gravity pulls them down clears it.
  * Swap for lane-strafe controls once you build the endless-runner
  * road scene. */
@@ -92,7 +92,14 @@ export function updateMovement(target, keys, deltaSeconds, collision = null) {
   target.userData.jumpVelocity ??= 0;
   target.userData.grounded ??= true;
   if (keys.space && target.userData.grounded) {
-    target.userData.jumpVelocity = target.userData.jumpSpeed || JUMP_SPEED;
+    let jump = target.userData.jumpSpeed || JUMP_SPEED;
+    // A rider at the bottom of a pit gets a strong hop that always clears its wall, so falling in is never a trap,
+    // even at level 1 (a normal jump only rises about a unit).
+    const pit = collision?.pitAt(target.position.x, target.position.z);
+    if (pit && target.position.y < pit.floor + 1) {
+      jump = Math.max(jump, Math.sqrt(2 * GRAVITY * (-pit.floor + STEP_HEIGHT + 0.6)));
+    }
+    target.userData.jumpVelocity = jump;
     target.userData.grounded = false;
   }
 

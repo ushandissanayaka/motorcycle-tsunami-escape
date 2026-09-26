@@ -1,44 +1,69 @@
 import * as THREE from 'three';
 import { createPlayer } from '../entities/Player.js';
-import { BOARD, createTrainingBoard } from '../entities/TrainingBoard.js';
+import { createTrainingBoard } from '../entities/TrainingBoard.js';
 import { createBikeStore } from '../entities/BikeStore.js';
 import { createCanyonWall } from '../entities/CanyonWall.js';
-import { createBikeDisplay, createEventBillboard } from '../entities/Scenery.js';
+import { createBikeDisplay } from '../entities/Scenery.js';
+import { createLeaderboards } from '../entities/Leaderboard.js';
+import { createTitledSign } from '../entities/Sign.js';
+import { createGroupChestArea } from '../entities/GroupChestArea.js';
 import { createLuckyStage } from '../entities/LuckyStage.js';
 import { createWaveTrack } from '../entities/WaveTrack.js';
 import { createTsunami } from '../entities/Tsunami.js';
 import { createSky } from '../entities/Sky.js';
 import { createCollision } from '../systems/collision.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
-import { BOOST_PADS, MAP_LAYOUT, WAVE_TRACK } from '../../shared/constants.js';
+import { BOOST_PADS, MAP_LAYOUT, WAVE_TRACK, WORLD_GATES } from '../../shared/constants.js';
+import { createWorldGate } from '../entities/WorldGate.js';
 
 const { room: ROOM, corridor: CORRIDOR } = MAP_LAYOUT;
 const STAGE_FRONT_Z = 20.5;
 
-// --- layout (world units; the room spans x +-50, z -38..30) -----------------
-const ROAD_HALF_WIDTH = 4;
+// --- layout (world units; the room spans x -50..38, z -38..31) -------------
+// Measured from the reference's top-down view: the road is wide, with a grey paved strip either side of it
+// that runs up to the stage, and the training pad sits close to the road on a short stem.
+const ROAD_HALF_WIDTH = 6.4;
 const ROAD_START_Z = STAGE_FRONT_Z;
-// The Lucky Blocks stage sits against the south wall of the room, opposite the
-// corridor, facing north; the main road starts at its steps.
-const STAGE = { centerX: 0, width: 40, zBack: ROOM.south + 4, zFront: STAGE_FRONT_Z };
-const LUCKY_ZONE = { minZ: 16, halfWidth: 22 }; // riders here see the Lucky Blocks title
+const PLAZA_WIDTH = 7.2;
+const PLAZA_WEST = { x0: -ROAD_HALF_WIDTH - PLAZA_WIDTH, x1: -ROAD_HALF_WIDTH, z0: -17.6, z1: STAGE_FRONT_Z - 0.5 };
+const PLAZA_EAST = { x0: ROAD_HALF_WIDTH, x1: ROAD_HALF_WIDTH + PLAZA_WIDTH, z0: -17.6, z1: STAGE_FRONT_Z - 0.5 };
+// The Lucky Blocks stage sits against the south wall of the room, opposite the corridor, facing north;
+// the main road starts at its steps. It is as wide as the road plus both strips.
+const STAGE = { centerX: 0, width: PLAZA_EAST.x1 - PLAZA_WEST.x0, zBack: ROOM.south + 1, zFront: STAGE_FRONT_Z };
 // The main road ends where the wave track begins, at the mouth of the corridor.
 const ROAD_END_Z = ROOM.north;
-const STORE_POSITION = new THREE.Vector3(-40, 0, -4);
+// The Speed and Wins leaderboards stand in the south-east corner (where the event billboard was), angled
+// as in the reference: Speed faces west-north-west, Wins faces north, up against the south wall.
+const LEADERBOARDS = [
+  { kind: 'speed', x: 25, z: 22.4, yaw: -2.06 },
+  { kind: 'wins', x: 19, z: 29.8, yaw: -2.79 },
+];
+// The Divine Lucky Block and the Group Chest sit on the grass west of the stage, facing north.
+const GROUP_CHEST_AREA = { divine: { x: -19.2, z: 24.6 }, chest: { x: -27.8, z: 25.4, yaw: Math.PI + 0.55 } };
+// The store stands a little way back from the grey strip beside the black road; a short path joins its ramp to the strip.
+// World 2's gate stands on the grass north of the bike store, angled so its front faces toward the black road.
+const WORLD_GATE_POSITION = { x: -24, z: -29, yaw: 0.85 }; // yaw turns its front from south toward the road (east)
+const STORE_SETBACK = 5;
+const STORE_POSITION = new THREE.Vector3(PLAZA_WEST.x0 - 17 - STORE_SETBACK, 0, 0); // 4 units south of where it was, toward the Group Chest
 const STORE_RAMP_FOOT_X = STORE_POSITION.x + 17;
 
-// Paved strips beside the road, wider on the bike-store side.
-const PLAZA_WEST = { x0: -10, x1: -ROAD_HALF_WIDTH, z0: -18, z1: 20 };
-const PLAZA_EAST = { x0: ROAD_HALF_WIDTH, x1: 8.2, z0: -22, z1: 14 };
-
-// Training place: boards in a row on a dark asphalt pad, reached by a short branch road.
-const BOARD_ROW_START_Z = 20;
-const BOARD_GAP = 1;
-const BOARD_PITCH = BOARD.width + BOARD_GAP;
-const BOARD_ROW_END_Z = BOARD_ROW_START_Z - (BOOST_PADS.length - 1) * BOARD_PITCH;
-const BOARD_ROW_CENTER_Z = (BOARD_ROW_START_Z + BOARD_ROW_END_Z) / 2;
-const TRAINING_PAD = { x0: 31, x1: ROOM.halfWidth - 3, z0: BOARD_ROW_END_Z - BOARD.width / 2 - 2.2, z1: BOARD_ROW_START_Z + BOARD.width / 2 + 2.2 };
-const BRANCH_ROAD_WIDTH = 4;
+// Training place: eight boards of different sizes in a row on a dark asphalt pad (the big 100x and 25x boards
+// at the north end), reached by a short stem road off the strip beside the main road. The stem meets the
+// pad off-centre, at the small steel boards, as in the reference.
+const BOARD_GAP = 0.7;
+const BOARD_ROW_SOUTH_Z = 14.4; // south edge of the first board
+const BOARD_X = 27.6; // deck centre
+let rowCursor = BOARD_ROW_SOUTH_Z;
+const BOARD_SPOTS = BOOST_PADS.map((pad) => {
+  const spot = { pad, z: rowCursor - pad.width / 2 };
+  rowCursor -= pad.width + BOARD_GAP;
+  return spot;
+});
+const BOARD_ROW_NORTH_Z = rowCursor + BOARD_GAP; // north edge of the last board
+const TRAINING_PAD = { x0: 21.6, x1: 32.6, z0: BOARD_ROW_NORTH_Z - 1.2, z1: BOARD_ROW_SOUTH_Z + 2.3 };
+const BRANCH_ROAD_WIDTH = 6;
+const BRANCH_ROAD_Z = 1.9;
+const TRAINING_CENTER_Z = (TRAINING_PAD.z0 + TRAINING_PAD.z1) / 2;
 
 const TILE = 6; // world units per stud / asphalt texture repeat
 const PLAZA_TILE = 4.8; // one paving slab
@@ -60,15 +85,16 @@ export function buildStartingPlace(scene) {
   const player = createPlayer();
   scene.add(player);
 
-  // Training boards line up along the east wall, south to north, with their
-  // monitors against the wall and the ramps facing the branch road.
-  const boardX = ROOM.halfWidth - 5.5 - BOARD.length / 2;
-  const boostPads = BOOST_PADS.map((pad, i) =>
+  // Training boards line up on the pad, south to north, with their monitors on the east side
+  // and the ramps facing the stem road.
+  const boostPads = BOARD_SPOTS.map(({ pad, z }) =>
     createTrainingBoard({
       multiplier: pad.multiplier,
       label: pad.label,
       style: pad.style,
-      position: new THREE.Vector3(boardX, 0, BOARD_ROW_START_Z - i * BOARD_PITCH),
+      length: pad.length,
+      width: pad.width,
+      position: new THREE.Vector3(BOARD_X, 0, z),
     })
   );
   boostPads.forEach((p) => scene.add(p));
@@ -78,12 +104,19 @@ export function buildStartingPlace(scene) {
 
   const stage = createLuckyStage(STAGE);
   scene.add(stage.group);
+  const leaderboards = createLeaderboards(LEADERBOARDS);
+  const chestArea = createGroupChestArea(GROUP_CHEST_AREA);
+  scene.add(chestArea.group);
+  const gate = createWorldGate({ title: WORLD_GATES[0].name.toUpperCase(), subtitle: `Level ${WORLD_GATES[0].levelRequired} Required` });
+  gate.group.position.set(WORLD_GATE_POSITION.x, 0, WORLD_GATE_POSITION.z);
+  gate.group.rotation.y = WORLD_GATE_POSITION.yaw;
+  scene.add(gate.group);
   // The wave place fills the corridor to the north.
   const waveTrack = createWaveTrack({ x0: -CORRIDOR.halfWidth, x1: CORRIDOR.halfWidth, zStart: ROOM.north, ...WAVE_TRACK });
   scene.add(waveTrack.group);
   const trainingSurfaces = boostPads.flatMap((board) => board.userData.surfaces);
   const collision = createCollision(
-    [...store.solids, ...stage.solids, ...waveTrack.solids],
+    [...store.solids, ...stage.solids, ...leaderboards.solids, ...chestArea.solids, ...waveTrack.solids],
     waveTrack.pits,
     [...trainingSurfaces, ...waveTrack.surfaces]
   );
@@ -99,17 +132,24 @@ export function buildStartingPlace(scene) {
   });
   scene.add(tsunami.group);
 
-  const billboard = createEventBillboard();
-  billboard.position.set(26, 0, 26);
-  billboard.rotation.y = -Math.PI / 2;
-  scene.add(billboard);
+  scene.add(leaderboards.group);
+
+  // "BIKE STORE" sign floating above the store's roof.
+  const storeSign = createTitledSign({ title: 'BIKE STORE', subtitle: 'Unlock faster bikes with wins!', titleSize: 2.3, titleWidth: 19, subtitleSize: 1.2, subtitleWidth: 29, scale: 1.7 });
+  storeSign.position.set(STORE_POSITION.x + 2, 8.6, STORE_POSITION.z);
+  scene.add(storeSign);
+
+  // "TRAINING" sign floating over the pad, as in the reference.
+  const trainingSign = createTitledSign({ title: 'TRAINING', subtitle: 'Increase your speed automatically!', titleSize: 2.3, titleWidth: 17, subtitleSize: 1.2, subtitleWidth: 29, scale: 1 });
+  trainingSign.position.set(BOARD_X, 0.6, TRAINING_CENTER_Z);
+  scene.add(trainingSign);
 
   const display = createBikeDisplay({ bikeId: 'bike_aetherune', name: 'Aetherune Bike', price: '699' });
-  display.group.position.set(-18, 0, 15);
+  display.group.position.set(11.8, 0, -22.1); // on the east strip, north end, as in the reference
   scene.add(display.group);
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
-  const update = (time, onStorePad) => {
+  const update = (time, onStorePad, camera) => {
     waveTrack.ensureAhead(player.position.z);
     if (waveTrack.solids.length > knownWaveSolids) {
       collision.solids.push(...waveTrack.solids.slice(knownWaveSolids));
@@ -119,19 +159,21 @@ export function buildStartingPlace(scene) {
     store.update(time, player, onStorePad);
     display.update(time);
     stage.update(time);
+    leaderboards.update();
+    chestArea.update(time, camera);
+    gate.update(time);
     waveTrack.update(time);
     tsunami.update(time, player.position.z);
     sky.userData.update(time);
     lights.followRider(player.position);
   };
 
-  /** Which titled area the rider is in, if any. */
-  const zoneAt = (position) => (position.z > LUCKY_ZONE.minZ && Math.abs(position.x) < LUCKY_ZONE.halfWidth ? 'lucky' : null);
-
-  return { player, boostPads, store, collision, update, zoneAt, waveTrack, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
+  return { player, boostPads, store, collision, update, leaderboards, waveTrack, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
 }
 
-const SUN_OFFSET = new THREE.Vector3(-30, 55, 30);
+// The sun stands low over the far south-west corner, behind the Group Chest, so everything throws its shadow
+// north-east across the room and the south and west walls lie in shade while the north and east walls catch the light.
+const SUN_OFFSET = new THREE.Vector3(-46, 40, 42);
 
 /**
  * Bright, warm daylight with coloured accent lights: a sunny key light whose shadows follow the
@@ -145,8 +187,8 @@ function addLighting(scene) {
   const sun = new THREE.DirectionalLight(0xfff0d0, 2.1);
   sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 45, bottom: -45, near: 5, far: 170 });
+  sun.shadow.mapSize.set(4096, 4096);
+  Object.assign(sun.shadow.camera, { left: -62, right: 62, top: 62, bottom: -62, near: 5, far: 260 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target);
@@ -159,7 +201,7 @@ function addLighting(scene) {
   glow(0x45d2ff, 12, STORE_POSITION.x + 2, 7, STORE_POSITION.z); // store: cool cyan
   glow(0xff5cf0, 30, -2, 6, 24, 30); // Lucky Blocks stage: magenta...
   glow(0x62c7ff, 30, 6, 6, 26, 30); // ...and sky blue
-  glow(0xffc93a, 35, ROOM.halfWidth - 10, 6, 3); // training place: warm gold
+  glow(0xffc93a, 35, BOARD_X, 6, TRAINING_CENTER_Z); // training place: warm gold
 
   return {
     /** Keeps the sun's shadow window centred on the rider. */
@@ -205,18 +247,19 @@ function addGround(scene, { grass, plaza, floor }) {
     mesh.receiveShadow = true;
     scene.add(mesh);
   };
-  const roomX = ROOM.halfWidth + UNDER_WALL;
-  groundPiece(-roomX, roomX, ROOM.north, ROOM.south + UNDER_WALL); // the room
-  groundPiece(-roomX, -CORRIDOR.halfWidth, ROOM.north - UNDER_WALL, ROOM.north); // under the north wall, left of the corridor
-  groundPiece(CORRIDOR.halfWidth, roomX, ROOM.north - UNDER_WALL, ROOM.north); // ...and right of it
+  const roomWest = -(ROOM.west + UNDER_WALL);
+  const roomEast = ROOM.east + UNDER_WALL;
+  groundPiece(roomWest, roomEast, ROOM.north, ROOM.south + UNDER_WALL); // the room
+  groundPiece(roomWest, -CORRIDOR.halfWidth, ROOM.north - UNDER_WALL, ROOM.north); // under the north wall, left of the corridor
+  groundPiece(CORRIDOR.halfWidth, roomEast, ROOM.north - UNDER_WALL, ROOM.north); // ...and right of it
 
   // Plazas beside the road.
   scene.add(slab(PLAZA_WEST, plaza, 0.06, 0.12, PLAZA_TILE));
   scene.add(slab(PLAZA_EAST, plaza, 0.06, 0.12, PLAZA_TILE));
 
   // Floor under the bike store, and the path from its ramp to the road plaza.
-  scene.add(slab({ x0: STORE_POSITION.x - 7.5, x1: STORE_POSITION.x + 7, z0: STORE_POSITION.z - 16.5, z1: STORE_POSITION.z + 16.5 }, floor, 0.06, 0.12));
   scene.add(slab({ x0: STORE_RAMP_FOOT_X, x1: PLAZA_WEST.x0, z0: STORE_POSITION.z - 3.5, z1: STORE_POSITION.z + 3.5 }, plaza, 0.06, 0.12, PLAZA_TILE));
+  scene.add(slab({ x0: STORE_POSITION.x - 7.5, x1: STORE_POSITION.x + 7, z0: STORE_POSITION.z - 16.5, z1: STORE_POSITION.z + 16.5 }, floor, 0.06, 0.12));
 
   // Studded canyon wall following the T-shaped outline.
   scene.add(createCanyonWall());
@@ -235,8 +278,8 @@ function addRoads(scene, { asphalt }) {
   scene.add(slab({ x0: -ROAD_HALF_WIDTH, x1: ROAD_HALF_WIDTH, z0: ROAD_END_Z, z1: ROAD_START_Z }, asphalt, 0.05));
   for (let z = ROAD_START_Z - 1; z > ROAD_END_Z; z -= 4) dash(0, z, false);
 
-  // Branch road east to the training pad, then the pad itself.
-  scene.add(slab({ x0: PLAZA_EAST.x1, x1: TRAINING_PAD.x0, z0: BOARD_ROW_CENTER_Z - BRANCH_ROAD_WIDTH / 2, z1: BOARD_ROW_CENTER_Z + BRANCH_ROAD_WIDTH / 2 }, asphalt, 0.05));
-  for (let x = PLAZA_EAST.x1 + 2.5; x < TRAINING_PAD.x0 - 1; x += 4) dash(x, BOARD_ROW_CENTER_Z, true);
+  // Stem road from the strip beside the main road to the training pad, then the pad itself.
+  scene.add(slab({ x0: PLAZA_EAST.x1, x1: TRAINING_PAD.x0, z0: BRANCH_ROAD_Z - BRANCH_ROAD_WIDTH / 2, z1: BRANCH_ROAD_Z + BRANCH_ROAD_WIDTH / 2 }, asphalt, 0.05));
+  for (let x = PLAZA_EAST.x1 + 1.5; x < TRAINING_PAD.x0 - 1; x += 2.6) dash(x, BRANCH_ROAD_Z, true);
   scene.add(slab(TRAINING_PAD, asphalt, 0.06, 0.12));
 }

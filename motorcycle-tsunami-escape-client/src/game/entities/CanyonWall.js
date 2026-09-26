@@ -129,16 +129,16 @@ function addMesa({ center, width, depth, height, yaw, rand, rock, grass }) {
  * wall would poke into the open floor.
  */
 function outlineEdges({ room, corridor }) {
-  const { halfWidth: rw, north: rn, south: rs } = room;
+  const { west: rw, east: re, north: rn, south: rs } = room;
   const { halfWidth: cw, north: cn } = corridor;
   const v = (x, z) => new THREE.Vector2(x, z);
   const edge = (a, b, outward, extendA, extendB, lowProfile = false) => ({ a, b, outward, extendA, extendB, lowProfile });
   return [
-    edge(v(-rw, rs), v(rw, rs), v(0, 1), true, true), // room south
+    edge(v(-rw, rs), v(re, rs), v(0, 1), true, true), // room south
     edge(v(-rw, rs), v(-rw, rn), v(-1, 0), true, true), // room west (bike store side)
-    edge(v(rw, rs), v(rw, rn), v(1, 0), true, true), // room east (training side)
+    edge(v(re, rs), v(re, rn), v(1, 0), true, true), // room east (training side)
     edge(v(-rw, rn), v(-cw, rn), v(0, -1), true, false), // room north, left of the corridor
-    edge(v(cw, rn), v(rw, rn), v(0, -1), false, true), // room north, right of the corridor
+    edge(v(cw, rn), v(re, rn), v(0, -1), false, true), // room north, right of the corridor
     // The corridor's north end is left open: no wall there, so the wave place looks out to the sky.
     edge(v(-cw, rn), v(-cw, cn), v(-1, 0), false, false, true), // low corridor west wall; leave sky visible above it
     edge(v(cw, rn), v(cw, cn), v(1, 0), false, false, true), // low corridor east wall
@@ -217,6 +217,11 @@ export function createCanyonWall({ layout = MAP_LAYOUT, seed = 7 } = {}) {
   };
   const rockMesh = new THREE.Mesh(mergeGeometries(rock), studMaterial(ROCK, 11, 0.95));
   const grassMesh = new THREE.Mesh(mergeGeometries(grass), studMaterial(GRASS, 23, 0.9));
+  // The tall walls throw long shadows across the floor and catch the shadows of the things in front of them.
+  for (const mesh of [rockMesh, grassMesh]) {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  }
   group.add(rockMesh, grassMesh);
   return group;
 }

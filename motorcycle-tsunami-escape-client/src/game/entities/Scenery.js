@@ -39,69 +39,6 @@ const glowTexture = () => {
   return new THREE.CanvasTexture(canvas);
 };
 
-/** "Follow Event!" billboard: orange posts with pale blue caps around a bright picture panel. */
-export function createEventBillboard() {
-  const group = new THREE.Group();
-  const orange = new THREE.MeshStandardMaterial({ color: 0xee7a2c, roughness: 0.6 });
-  const cap = new THREE.MeshStandardMaterial({ color: 0x8fa6d0, roughness: 0.6 });
-  const add = (w, h, d, material, x, y, z) => {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
-    mesh.position.set(x, y, z);
-    mesh.castShadow = true;
-    group.add(mesh);
-  };
-
-  for (const s of [-1, 1]) {
-    add(0.7, 5.2, 0.7, orange, s * 4.6, 2.6, 0);
-    add(1.2, 1.1, 1.2, cap, s * 4.6, 0.55, 0); // pale blue base block
-    add(1.1, 0.9, 1.1, cap, s * 4.6, 5.5, 0); // pale blue top block
-  }
-  add(9.6, 0.6, 0.6, orange, 0, 5.4, 0);
-  add(9.6, 0.6, 0.6, orange, 0, 1.6, 0);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 256;
-  const ctx = canvas.getContext('2d');
-  const sky = ctx.createLinearGradient(0, 0, 512, 256);
-  sky.addColorStop(0, '#2f9bff');
-  sky.addColorStop(1, '#8be0ff');
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, 512, 256);
-  // Red bike and rider silhouette.
-  ctx.fillStyle = '#d8232f';
-  ctx.beginPath();
-  ctx.ellipse(370, 150, 70, 26, -0.2, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.fillStyle = '#14141b';
-  for (const x of [310, 430]) {
-    ctx.beginPath();
-    ctx.arc(x, 190, 34, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.fillStyle = '#ffd54a';
-  ctx.fillRect(345, 80, 36, 50);
-  ctx.font = 'italic 900 64px "Arial Black", Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = 12;
-  ctx.strokeStyle = '#0e1a3a';
-  ctx.save();
-  ctx.translate(24, 200);
-  ctx.rotate(-0.22);
-  ctx.strokeText('Follow Event!', 0, 0, 300);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText('Follow Event!', 0, 0, 300);
-  ctx.restore();
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const panel = new THREE.Mesh(new THREE.PlaneGeometry(8.2, 3.6), new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));
-  panel.position.set(0, 3.5, 0.05);
-  group.add(panel);
-  add(8.6, 4, 0.2, orange, 0, 3.5, -0.08); // frame behind the picture
-  return group;
-}
-
 /** Glowing ring with a floating limited-edition bike and its name plate. */
 export function createBikeDisplay({ bikeId, name, price }) {
   const group = new THREE.Group();

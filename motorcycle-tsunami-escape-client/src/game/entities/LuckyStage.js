@@ -1,10 +1,16 @@
 import * as THREE from 'three';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
+import epicArt from '../../assets/lucky/epic.png';
+import rareArt from '../../assets/lucky/rare.png';
+import commonArt from '../../assets/lucky/common.png';
+import { createTitledSign } from './Sign.js';
+import { createWingedBlock } from './WingedBlock.js';
 
 /**
- * The Lucky Blocks stage: a wide studded platform with shallow steps and a
- * paved path up the middle, backed by the canyon wall. Four winged lucky
- * blocks hover above it. The stage faces +Z (toward riders coming up the
+ * The Lucky Blocks stage: a studded platform, as wide as the road plus its two paved strips, with shallow steps and a
+ * paved path up the middle, backed by the canyon wall. Three winged lucky
+ * blocks hover above it, flapping and casting shadows on the platform (their art is cut from the reference screenshot), under a
+ * "LUCKY BLOCKS" sign on the canyon wall. The stage faces +Z (toward riders coming up the
  * corridor); `solids` let riders drive up the steps.
  */
 
@@ -13,185 +19,19 @@ const STAGE_COLORS = {
   edge: 0x9a96cc,
 };
 
+// `art` is the winged block cut out of the reference screenshot (`size` in art pixels).
+// `split` is where the body starts and ends in the art: the columns left and right of it are the wings.
 const BLOCKS = [
-  { name: 'Epic Lucky Block', rarity: 'Epic', rarityColor: '#c74bff', price: '11k', color: 0x8b3fe0, dark: '#5a22a8', light: '#b57cff', wing: '#a46bff', wingTip: '#d2adff' },
-  { name: 'Rare Lucky Block', rarity: 'Rare', rarityColor: '#4db8ff', price: '3.2k', color: 0x62c7ff, dark: '#2f86c4', light: '#a6e4ff', wing: '#7fd6ff', wingTip: '#c9f0ff' },
-  { name: 'Common Lucky Block', rarity: 'Common', rarityColor: '#4dff9b', price: '220', color: 0x2fd66a, dark: '#178f45', light: '#7dffaa', wing: '#43e07d', wingTip: '#9dffc0' },
-  { name: 'Divine Lucky Block', rarity: 'Divine', rarityColor: '#ff5f8f', price: '169', color: 0xff4f8a, dark: '#b52458', light: '#ff9fbe', wing: '#ff6b9c', wingTip: '#ffc0d6', coin: true, tag: 'OP!' },
+  { name: 'Epic Lucky Block', rarity: 'Epic', rarityColor: '#d21fff', price: '11k', art: epicArt, size: [492, 292], split: [135, 335] },
+  { name: 'Rare Lucky Block', rarity: 'Rare', rarityColor: '#3db4ff', price: '3.2k', art: rareArt, size: [480, 292], split: [148, 328] },
+  { name: 'Common Lucky Block', rarity: 'Common', rarityColor: '#3dffa0', price: '220', art: commonArt, size: [480, 292], split: [146, 343] },
 ];
 
-const BLOCK_SIZE = 2.2;
-
-const outlined = (ctx, text, x, y, font, fill, stroke = '#0e1220', lineWidth = 12) => {
-  ctx.font = font;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = stroke;
-  ctx.strokeText(text, x, y, 480);
-  ctx.fillStyle = fill;
-  ctx.fillText(text, x, y, 480);
-};
-
-/** Block face: two "?" eyes and a zigzag mouth on a bevelled panel. */
-function faceTexture({ color, dark, light }) {
-  const size = 256;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  const base = `#${new THREE.Color(color).getHexString()}`;
-  ctx.fillStyle = dark;
-  ctx.fillRect(0, 0, size, size);
-  ctx.fillStyle = base;
-  ctx.fillRect(12, 12, size - 24, size - 24);
-  ctx.fillStyle = light;
-  ctx.globalAlpha = 0.35;
-  ctx.fillRect(12, 12, size - 24, 22);
-  ctx.globalAlpha = 1;
-
-  for (const x of [52, 148]) {
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.roundRect(x, 62, 56, 64, 8);
-    ctx.fill();
-    ctx.fillStyle = dark;
-    ctx.font = '900 54px "Arial Black", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('?', x + 28, 96);
-  }
-  // Zigzag mouth.
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 12;
-  ctx.lineJoin = 'miter';
-  ctx.beginPath();
-  ctx.moveTo(52, 176);
-  for (let i = 0; i <= 6; i += 1) ctx.lineTo(52 + i * 25.3, i % 2 ? 176 : 208);
-  ctx.stroke();
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-/** Right wing with its root at the left edge; the left wing mirrors it. */
-function wingTexture({ wing, wingTip, dark }) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 256;
-  canvas.height = 160;
-  const ctx = canvas.getContext('2d');
-  const feathers = 7;
-  for (let layer = 0; layer < 2; layer += 1) {
-    for (let i = 0; i < feathers; i += 1) {
-      const t = i / (feathers - 1);
-      const angle = -0.75 + t * 1.25; // fans from up-and-out to down-and-out
-      const length = (layer ? 175 : 235) - Math.abs(t - 0.35) * 60;
-      const width = layer ? 30 : 36;
-      ctx.save();
-      ctx.translate(16, 70);
-      ctx.rotate(angle);
-      const gradient = ctx.createLinearGradient(0, 0, length, 0);
-      gradient.addColorStop(0, layer ? dark : wing);
-      gradient.addColorStop(1, layer ? wing : wingTip);
-      ctx.fillStyle = gradient;
-      ctx.beginPath();
-      ctx.moveTo(0, -width * 0.4);
-      ctx.quadraticCurveTo(length * 0.6, -width, length, 0);
-      ctx.quadraticCurveTo(length * 0.6, width, 0, width * 0.4);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-    }
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-function drawTrophy(ctx, cx, cy, s) {
-  ctx.fillStyle = '#ffb81f';
-  ctx.strokeStyle = '#0e1220';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(cx - s * 0.5, cy - s * 0.5);
-  ctx.lineTo(cx + s * 0.5, cy - s * 0.5);
-  ctx.quadraticCurveTo(cx + s * 0.5, cy + s * 0.25, cx, cy + s * 0.3);
-  ctx.quadraticCurveTo(cx - s * 0.5, cy + s * 0.25, cx - s * 0.5, cy - s * 0.5);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.fill();
-  ctx.fillRect(cx - s * 0.08, cy + s * 0.3, s * 0.16, s * 0.2);
-  ctx.strokeRect(cx - s * 0.08, cy + s * 0.3, s * 0.16, s * 0.2);
-  ctx.fillRect(cx - s * 0.3, cy + s * 0.5, s * 0.6, s * 0.14);
-  ctx.strokeRect(cx - s * 0.3, cy + s * 0.5, s * 0.6, s * 0.14);
-}
-
-function drawCoin(ctx, cx, cy, s) {
-  ctx.fillStyle = '#8dff5a';
-  ctx.strokeStyle = '#0e1220';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.arc(cx, cy + s * 0.1, s * 0.5, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.fill();
-  ctx.fillStyle = '#2f8f1a';
-  ctx.beginPath();
-  ctx.arc(cx, cy + s * 0.1, s * 0.25, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-/** Name, rarity and price plate above a block. */
-function labelSprite({ name, rarity, rarityColor, price, coin, tag }) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 300;
-  const ctx = canvas.getContext('2d');
-  if (tag) outlined(ctx, tag, 256, 30, '900 44px "Arial Black", Arial, sans-serif', '#ff5f8f', '#0e1220', 10);
-  outlined(ctx, name, 256, 88, '900 54px "Arial Black", Arial, sans-serif', '#ffffff');
-  outlined(ctx, rarity, 256, 156, '900 40px "Arial Black", Arial, sans-serif', rarityColor, '#0e1220', 10);
-  if (coin) drawCoin(ctx, 200, 226, 56);
-  else drawTrophy(ctx, 196, 222, 50);
-  ctx.font = '900 56px "Arial Black", Arial, sans-serif';
-  const width = ctx.measureText(price).width;
-  outlined(ctx, price, 236 + 30 + width / 2, 228, '900 56px "Arial Black", Arial, sans-serif', coin ? '#b6ff7a' : '#ffe9a0', '#0e1220', 10);
-
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set(6, 3.5, 1);
-  return sprite;
-}
-
-function createBlock(def) {
-  const holder = new THREE.Group();
-  const cube = new THREE.Group();
-  holder.add(cube);
-
-  const plain = new THREE.MeshStandardMaterial({ color: def.color, emissive: def.color, emissiveIntensity: 0.25, roughness: 0.5 });
-  const face = new THREE.MeshStandardMaterial({ map: faceTexture(def), emissive: 0xffffff, emissiveMap: faceTexture(def), emissiveIntensity: 0.3, roughness: 0.5 });
-  // Box face order: +x, -x, +y, -y, +z (front), -z.
-  const body = new THREE.Mesh(new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE), [plain, plain, plain, plain, face, plain]);
-  body.castShadow = true;
-  cube.add(body);
-
-  const wingMaterial = new THREE.MeshBasicMaterial({ map: wingTexture(def), transparent: true, alphaTest: 0.2, side: THREE.DoubleSide });
-  const wings = [-1, 1].map((side) => {
-    const pivot = new THREE.Group();
-    pivot.position.set(side * BLOCK_SIZE * 0.5, 0, -0.1);
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(3, 1.9), wingMaterial);
-    plane.position.x = side * 1.5;
-    plane.scale.x = side; // mirror the left wing
-    pivot.add(plane);
-    cube.add(pivot);
-    return { pivot, side };
-  });
-
-  const label = labelSprite(def);
-  label.position.y = BLOCK_SIZE * 0.5 + 2.3;
-  holder.add(label);
-  return { holder, cube, wings };
-}
+const SPACING = 7.5; // between neighbouring blocks (the stage is 27 wide, as in the reference)
+const BLOCK_WIDTH = 4.9; // world units, wing tip to wing tip
+const HOVER = 3.8; // block centre above the platform top
+const LABEL_LIFT = 2.18; // label centre above the block centre
+const LABEL_WIDTH = 7.5; // world width of the name / rarity / price label
 
 /**
  * Builds the stage with its back edge at world `zBack` and its steps at
@@ -211,7 +51,7 @@ export function createLuckyStage({ centerX, width, zBack, zFront, height = 1, st
   const edge = new THREE.MeshStandardMaterial({ color: STAGE_COLORS.edge, roughness: 0.6, emissive: STAGE_COLORS.edge, emissiveIntensity: 0.2 });
   const path = new THREE.MeshStandardMaterial({ map: makePaverTexture(PALETTES.plaza, 52, 1, 8, 7), roughness: 0.85 });
   const solids = [];
-  const pathWidth = 6;
+  const pathWidth = 8;
   const riser = height / (steps + 1);
 
   const tier = (lzBack, lzFront, top) => {
@@ -250,23 +90,24 @@ export function createLuckyStage({ centerX, width, zBack, zFront, height = 1, st
     tier(back, back + stepDepth, height - riser * (i + 1));
   }
 
-  // Blocks hover above the platform, facing the riders.
-  const spacing = 8;
-  const blockZ = platformFront - 3.5;
+  // Blocks hover above the platform, facing the riders, each with its shadow on the platform.
+  const blockZ = platformFront - 3.2;
   const blocks = BLOCKS.map((def, i) => {
-    const block = createBlock(def);
-    block.holder.position.set((i - (BLOCKS.length - 1) / 2) * spacing, height + 4.6, blockZ);
-    inner.add(block.holder);
+    const block = createWingedBlock(def, { width: BLOCK_WIDTH, labelWidth: LABEL_WIDTH, labelLift: LABEL_LIFT });
+    const x = (i - (BLOCKS.length - 1) / 2) * SPACING;
+    block.holder.position.set(x, height + HOVER, blockZ);
+    block.shadow.position.set(x, height + 0.08, blockZ + 0.5);
+    inner.add(block.holder, block.shadow);
     return { ...block, phase: i * 1.1 };
   });
 
+  // Sized for the 7.5 block spacing (the sign's base numbers were tuned at 5.3).
+  const sign = createTitledSign({ title: 'LUCKY BLOCKS', subtitle: 'Open Lucky Blocks for Brainrot Pets!', scale: SPACING / 5.3 });
+  sign.position.set(0, height + HOVER, blockZ);
+  inner.add(sign);
+
   const update = (time) => {
-    for (const { cube, wings, phase } of blocks) {
-      cube.position.y = Math.sin(time * 1.6 + phase) * 0.3;
-      cube.rotation.y = Math.sin(time * 0.9 + phase) * 0.14;
-      const flap = Math.sin(time * 4 + phase) * 0.22;
-      for (const { pivot, side } of wings) pivot.rotation.set(0, side * 0.5, side * flap);
-    }
+    for (const { animate, phase } of blocks) animate(time, phase);
   };
 
   return { group, solids, update };

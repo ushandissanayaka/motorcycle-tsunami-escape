@@ -25,7 +25,8 @@ const ROOM_NORTH = -38;
  * hand-drawn sketch (520x355); the corridor is as long as the wave place needs.
  */
 export const MAP_LAYOUT = {
-  room: { halfWidth: 50, north: ROOM_NORTH, south: 30, southMargin: 3 }, // southMargin: riders may drive up to the Lucky Blocks stage
+  // west / east: how far the room reaches either side of x = 0 (the bike store side is wider than the training side).
+  room: { west: 48, east: 38, north: ROOM_NORTH, south: 31, southMargin: 3 }, // southMargin: riders may drive up to the Lucky Blocks stage
   corridor: { halfWidth: 25, north: ROOM_NORTH - waveTrackLength(WAVE_TRACK), sideMargin: 2 }, // widened wave course for broader slabs and pits
 };
 
@@ -34,7 +35,7 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 /** Nearest point inside the walkable area (room ∪ corridor), keeping `margin` from the walls. */
 export function clampToMap(x, z, margin = 7) {
   const { room, corridor } = MAP_LAYOUT;
-  const inRoom = { x: clamp(x, -room.halfWidth + margin, room.halfWidth - margin), z: clamp(z, room.north + margin, room.south - room.southMargin) };
+  const inRoom = { x: clamp(x, -room.west + margin, room.east - margin), z: clamp(z, room.north + margin, room.south - room.southMargin) };
   const inCorridor = {
     x: clamp(x, -corridor.halfWidth + corridor.sideMargin, corridor.halfWidth - corridor.sideMargin),
     // The wave corridor continues as the rider advances; only its entrance is fixed.
@@ -50,14 +51,14 @@ export function clampToMap(x, z, margin = 7) {
  * The three steel boards share one tier; their 5x is a placeholder value.
  */
 export const BOOST_PADS = [
-  { id: 'pad_9x', label: '9x Speed', multiplier: 9, style: 'blue' },
-  { id: 'pad_3x_a', label: '3x Speed', multiplier: 3, style: 'yellow' },
-  { id: 'pad_5x_a', label: '5x Speed', multiplier: 5, style: 'steel' },
-  { id: 'pad_5x_b', label: '5x Speed', multiplier: 5, style: 'steel' },
-  { id: 'pad_5x_c', label: '5x Speed', multiplier: 5, style: 'steel' },
-  { id: 'pad_3x_b', label: '3x Speed', multiplier: 3, style: 'yellow' },
-  { id: 'pad_25x', label: '25x Speed', multiplier: 25, style: 'purple' },
-  { id: 'pad_100x', label: '100x Speed', multiplier: 100, style: 'mono' },
+  { id: 'pad_9x', label: '9x Speed', multiplier: 9, style: 'blue', width: 3.4, length: 6.4 },
+  { id: 'pad_3x_a', label: '3x Speed', multiplier: 3, style: 'yellow', width: 3.1, length: 4.7 },
+  { id: 'pad_5x_a', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7 },
+  { id: 'pad_5x_b', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7 },
+  { id: 'pad_5x_c', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7 },
+  { id: 'pad_3x_b', label: '3x Speed', multiplier: 3, style: 'yellow', width: 3.0, length: 4.5 },
+  { id: 'pad_25x', label: '25x Speed', multiplier: 25, style: 'purple', width: 6.1, length: 8.6 },
+  { id: 'pad_100x', label: '100x Speed', multiplier: 100, style: 'mono', width: 7.6, length: 9.6 },
 ];
 
 /**

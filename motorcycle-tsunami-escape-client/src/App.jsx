@@ -24,14 +24,16 @@ const effectiveBikeSpeed = (baseSpeed, speed, level) =>
 
 function readProfile() {
   try {
-    const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || '{}');
+    // Wins, trophy pickups and the equipped bike belong to this tab's guest session, like speed
+    // and level: a new browser or tab starts from zero. Drop the old shared save if it exists.
+    localStorage.removeItem(SAVE_KEY);
+    const saved = JSON.parse(sessionStorage.getItem(SAVE_KEY) || '{}');
     const sessionProgress = JSON.parse(sessionStorage.getItem(SESSION_PROGRESS_KEY) || '{}');
     // Clear the old untouched starter fill so zero-speed sessions show an empty bar.
     if (sessionProgress.speed === 0 && sessionProgress.level === 1 && sessionProgress.levelProgress === 12) {
       sessionProgress.levelProgress = 0;
     }
-    // Speed and level belong to this tab's guest session. A newly opened tab
-    // starts fresh even when another tab has already played this browser game.
+    // A newly opened tab starts fresh even when another tab has already played this browser game.
     const profile = {
       ...freshProfile,
       wins: Number.isFinite(saved.wins) ? saved.wins : freshProfile.wins,
@@ -62,7 +64,6 @@ export default function App() {
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
   const [notice, setNotice] = useState(null);
   const [celebration, setCelebration] = useState(null);
-  const [zone, setZone] = useState(null);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
 
@@ -91,6 +92,7 @@ export default function App() {
     const world = buildStartingPlace(scene);
     world.waveTrack.setCollectedRewards(profileRef.current.collectedRewards);
     bikeRef.current = world.player;
+    const detachLeaderboards = world.leaderboards.attach(camera, renderer.domElement);
     worldRef.current = world;
     const keys = createInputState();
     const remoteRiders = new Map();
@@ -141,7 +143,6 @@ export default function App() {
 
     let previous = performance.now();
     let active = true;
-    let lastZone = null;
     const animate = (now) => {
       if (!active) return;
       const delta = Math.min((now - previous) / 1000, 0.05);
@@ -210,18 +211,13 @@ export default function App() {
         }
       }
       updateChaseCamera(camera, world.player);
-      world.update(now / 1000, (bike) => padHandlerRef.current(bike));
+      world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera);
       if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
         world.player.userData.grounded = true;
         world.player.userData.jumpVelocity = 0;
         setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
-      }
-      const currentZone = world.zoneAt(world.player.position);
-      if (currentZone !== lastZone) {
-        lastZone = currentZone;
-        setZone(currentZone);
       }
       if (room && now - lastPresenceSend > 100) {
         lastPresenceSend = now;
@@ -254,6 +250,7 @@ export default function App() {
       room?.leave();
       keys.dispose();
       detachCameraControls();
+      detachLeaderboards();
       window.removeEventListener('resize', resize);
       composer.dispose();
       renderer.dispose();
@@ -263,7 +260,7 @@ export default function App() {
 
   useEffect(() => {
     const { wins, finishes, selectedBike, collectedRewards } = profile;
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike, collectedRewards }));
+    sessionStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike, collectedRewards }));
     sessionStorage.setItem(SESSION_PROGRESS_KEY, JSON.stringify({
       speed: profile.speed,
       level: profile.level,
@@ -335,7 +332,6 @@ export default function App() {
         finishes={profile.finishes}
         notice={notice}
         celebration={celebration}
-        zone={zone}
         onWavesChange={(disabled) => worldRef.current?.setWavesEnabled(!disabled)}
         selectedBike={profile.selectedBike}
         onSelectBike={selectBike}

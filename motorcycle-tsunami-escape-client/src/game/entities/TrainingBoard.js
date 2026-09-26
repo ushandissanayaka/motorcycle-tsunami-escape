@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 
 /** Deck footprint: rides in along X from the road side, monitor at the +X end. */
-export const BOARD = { length: 10, width: 3.6 };
+export const BOARD = { length: 8.2, width: 3.4 };
 
 const DECK_TOP = 0.24;
 const RAIL_TOP = 0.6;
@@ -176,9 +176,12 @@ const solid = (color, roughness = 0.5) =>
  * side rails, striped deck, a monitor on a stand at the +X end, and a glowing
  * speed effect. Position is the deck centre; the board is not rotated.
  */
-export function createTrainingBoard({ multiplier, label, style = 'blue', position }) {
+export function createTrainingBoard({ multiplier, label, style = 'blue', position, length = BOARD.length, width = BOARD.width }) {
   const s = STYLES[style] ?? STYLES.blue;
-  const { length: L, width: W } = BOARD;
+  const L = length;
+  const W = width;
+  // The monitor stand and banner grow with the deck: the wide boards get wide monitors, the narrow ones small.
+  const sw = THREE.MathUtils.clamp(W / 3.4, 0.68, 2.2);
   const group = new THREE.Group();
   group.position.copy(position);
 
@@ -226,14 +229,14 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
   // Monitor stand at the +X end: posts, cross-bar, bezel and studded screen, plus hand rails.
   const standX = L / 2 - 0.25;
   for (const side of [-1, 1]) {
-    place(box(0.2, 1.9, 0.2, postMaterial), standX, 1.15, side * 1.15);
-    place(box(2.2, 0.16, 0.16, postMaterial), standX - 1.2, 0.95, side * 1.15); // hand rail
-    place(box(0.14, 0.75, 0.14, postMaterial), standX - 2.3, 0.575, side * 1.15); // rail leg
+    place(box(0.2, 1.9, 0.2, postMaterial), standX, 1.15, side * 1.15 * sw);
+    place(box(2.2, 0.16, 0.16, postMaterial), standX - 1.2, 0.95, side * 1.15 * sw); // hand rail
+    place(box(0.14, 0.75, 0.14, postMaterial), standX - 2.3, 0.575, side * 1.15 * sw); // rail leg
   }
-  place(box(0.2, 0.16, 2.5, postMaterial), standX, 0.7, 0);
-  place(box(0.14, 1.6, 2.75, solid(s.bezel, 0.4)), standX, 2.35, 0);
+  place(box(0.2, 0.16, 2.5 * sw, postMaterial), standX, 0.7, 0);
+  place(box(0.14, 1.6, 2.75 * sw, solid(s.bezel, 0.4)), standX, 2.35, 0);
   const screen = place(
-    new THREE.Mesh(new THREE.PlaneGeometry(2.4, 1.35), new THREE.MeshBasicMaterial({ map: screenTexture(s.screen) })),
+    new THREE.Mesh(new THREE.PlaneGeometry(2.4 * sw, 1.35), new THREE.MeshBasicMaterial({ map: screenTexture(s.screen) })),
     standX - 0.075,
     2.35,
     0
@@ -281,7 +284,7 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
 
   // Floating banner above the monitor.
   const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(label, s.labelColor, s.labelBand), transparent: true, depthWrite: false }));
-  banner.scale.set(4.2, 1.05, 1);
+  banner.scale.set(4.2 * Math.min(sw, 1.3), 1.05 * Math.min(sw, 1.3), 1);
   banner.position.set(standX - 0.6, 4.3, 0);
   group.add(banner);
 

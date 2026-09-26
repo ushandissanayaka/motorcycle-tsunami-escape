@@ -2,30 +2,81 @@ import React, { useEffect, useRef, useState } from 'react';
 import BikeSection from './BikeSection.jsx';
 import './StartingPlaceHUD.css';
 
-const ICONS = {
-  bikes: '\u{1F3CD}', shop: '\u{1F6D2}', rebirth: '\u{1F504}',
-  trails: '\u{2728}', worlds: '\u{1F30E}', wins: '\u{1F3C6}',
-  troll: '\u{1F608}', pets: '\u{1F43E}', rewards: '\u{1F381}', wheel: '\u{1F3A1}',
+import trophyArt from '../assets/hud/trophy.png';
+import shopArt from '../assets/hud/shop.png';
+import rebirthArt from '../assets/hud/rebirth.png';
+import trailsArt from '../assets/hud/trails.png';
+import worldsArt from '../assets/hud/worlds.png';
+import winsArt from '../assets/hud/wins.png';
+import price75Art from '../assets/hud/price75.png';
+import dailyArt from '../assets/hud/daily.png';
+import wheelArt from '../assets/hud/wheel.png';
+import wavesArt from '../assets/hud/waves.png';
+import customTitleArt from '../assets/hud/custom_title.png';
+import customBarArt from '../assets/hud/custom_bar.png';
+import maxArt from '../assets/hud/max.png';
+import speed2xArt from '../assets/hud/speed2x.png';
+import price3Art from '../assets/hud/price3.png';
+import petsArt from '../assets/hud/pets.png';
+import inventoryArt from '../assets/hud/inventory.png';
+import trollArt from '../assets/hud/troll.png';
+import levelBarArt from '../assets/hud/level_bar.png';
+import levelBarEmptyArt from '../assets/hud/level_bar_empty.png';
+import pack100kArt from '../assets/hud/pack100k.png';
+import pack1mArt from '../assets/hud/pack1m.png';
+import pack10mArt from '../assets/hud/pack10m.png';
+
+export const CUSTOM_SPEED_MAX = 116;
+
+/*
+ * The HUD art was cut out of the reference screenshot (1919x1004). Every piece is placed at its
+ * original screenshot rectangle [x0, y0, x1, y1] and scaled with --u (one screenshot pixel).
+ */
+const px = (n) => `calc(${n} * var(--u))`;
+const boxStyle = ([x0, y0, x1, y1]) => {
+  const style = { width: px(x1 - x0), height: px(y1 - y0) };
+  if (x0 > 1200) style.right = px(1919 - x1);                 // right column hugs the right edge
+  else if (x0 > 500) style.left = `calc(50% + ${px(x0 - 959.5)})`; // bottom bar stays centred
+  else style.left = px(x0);
+  if (y0 >= 800) style.bottom = px(1004 - y1);                // bottom row hugs the bottom edge
+  else style.top = px(y0);
+  return style;
 };
 
-function ActionTile({ icon, label, tone, onClick, detail }) {
+const BOX = {
+  shop: [18, 361, 162, 503], rebirth: [165, 361, 309, 503], trails: [18, 506, 162, 648],
+  worlds: [165, 496, 328, 648], wins: [18, 651, 311, 749], price75: [82, 748, 248, 782],
+  daily: [1732, 4, 1832, 78], wheel: [1838, 4, 1916, 78], waves: [1425, 20, 1675, 275],
+  customTitle: [1662, 222, 1897, 264], customBar: [1636, 258, 1908, 340], max: [1768, 338, 1898, 372],
+  speed2x: [1636, 378, 1906, 472], price3: [1698, 470, 1846, 504],
+  pets: [1636, 500, 1767, 632], inventory: [1771, 500, 1902, 632], troll: [1771, 634, 1902, 766],
+  trophy: [23, 270, 260, 351],
+  levelBar: [517, 825, 1403, 893],
+  pack100k: [578, 900, 800, 982], pack1m: [803, 900, 1023, 982], pack10m: [1027, 893, 1342, 982],
+};
+
+const formatSpeed = (value) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
+
+function Art({ src, box, label, onClick, className = '' }) {
   return (
-    <button className={`action-tile ${tone}`} onClick={onClick}>
-      <span className="action-icon">{icon}</span>
-      <strong>{label}</strong>
-      {detail && <small>{detail}</small>}
+    <button className={`hud-btn art-btn ${className}`} style={boxStyle(box)} aria-label={label} onClick={onClick}>
+      <img src={src} alt="" draggable={false} />
     </button>
   );
 }
 
+function StaticArt({ src, box }) {
+  return <img className="hud-static" style={boxStyle(box)} src={src} alt="" draggable={false} />;
+}
+
 export default function StartingPlaceHUD({
-  bikes, wins, finishes, notice, celebration, zone, onWavesChange, selectedBike, onSelectBike,
+  bikes, wins, finishes, notice, celebration, onWavesChange, selectedBike, onSelectBike,
   speed, level, levelProgress, customSpeed, onCustomSpeed,
 }) {
   const [showGarage, setShowGarage] = useState(false);
-  const [musicOn, setMusicOn] = useState(true);
   const [wavesDisabled, setWavesDisabled] = useState(false);
-  const [doubleSpeed, setDoubleSpeed] = useState(false);
+  const [editingSpeed, setEditingSpeed] = useState(false);
+  const [speedDraft, setSpeedDraft] = useState('');
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
 
@@ -42,88 +93,100 @@ export default function StartingPlaceHUD({
     toastTimer.current = setTimeout(() => setToast(''), 2200);
   };
 
-  const invitePlayer = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href);
-      showMessage('Game link copied. Invite a friend to the hub!');
-    } catch {
-      showMessage('Share this page link with a friend to meet in the hub.');
-    }
+  // Blur after a click so SPACE (hop) never re-triggers the button that was just pressed.
+  const press = (action) => (event) => {
+    event.currentTarget.blur();
+    action();
   };
+  const soon = (text) => press(() => showMessage(text));
 
-  const openGarage = () => setShowGarage((current) => !current);
+  const toggleGarage = press(() => setShowGarage((current) => !current));
+  const toggleWaves = press(() => {
+    const next = !wavesDisabled;
+    setWavesDisabled(next);
+    onWavesChange?.(next);
+    showMessage(next ? 'Waves disabled.' : 'Waves enabled.');
+  });
+
+  const equipped = bikes.find((bike) => bike.id === selectedBike);
+  const barFill = speed === 0 ? 0 : levelProgress;
+
+  const startEditingSpeed = () => {
+    if (editingSpeed) return;
+    setSpeedDraft(formatSpeed(customSpeed));
+    setEditingSpeed(true);
+  };
+  const commitSpeed = () => {
+    const value = parseFloat(speedDraft);
+    if (Number.isFinite(value)) onCustomSpeed(Math.min(CUSTOM_SPEED_MAX, Math.max(1, value)));
+    setEditingSpeed(false);
+  };
+  const onSpeedKey = (event) => {
+    event.stopPropagation();
+    if (event.key === 'Enter') event.currentTarget.blur();
+    if (event.key === 'Escape') setEditingSpeed(false);
+  };
 
   return (
     <div className="starting-hud">
-      <nav className="top-toolbar" aria-label="Game controls">
-        <button className="toolbar-square brand-square" onClick={() => showMessage('Motorcycle Tsunami Escape')}>M</button>
-        <button className="toolbar-square menu-square" aria-label="Menu" onClick={() => showMessage('You are in the Starting Place')}><span /><span /><span /></button>
-        <button className="toolbar-pill" onClick={() => setMusicOn((value) => !value)}>Music <b>{musicOn ? 'ON' : 'OFF'}</b></button>
-        <button className="toolbar-pill invite-pill" onClick={invitePlayer}><span>{'\u{1F4E8}'}</span> Invite Player</button>
-      </nav>
+      {/* Top-left: trophy with the live wins count */}
+      <button className="hud-btn art-btn wins-btn" style={boxStyle(BOX.trophy)} aria-label={`Wins: ${wins}`} onClick={soon(`You have ${wins.toLocaleString()} ${wins === 1 ? 'win' : 'wins'}.`)}>
+        <img className="wins-trophy" src={trophyArt} alt="" draggable={false} />
+        <span className="wins-count outlined">{wins.toLocaleString()}</span>
+      </button>
 
-      {zone === 'lucky' && (
-        <header className="center-game-title">
-          <div className="game-title-main">LUCKY BLOCKS</div>
-          <div className="game-title-sub">Open Lucky Blocks for Brainrot Pets!</div>
-        </header>
-      )}
-
-      <section className="event-card">
-        <div className="event-art"><span>{'\u{1F3C1}'}</span><b>RIDE<br />TOGETHER</b></div>
-        <div className="event-copy"><span className="event-kicker">STARTING PLACE EVENT</span><strong>Ready to ride?</strong><small>Explore the hub and find your next bike.</small></div>
-        <button onClick={openGarage}>OPEN GARAGE</button>
-      </section>
-
-      <div className="top-stats">
-        <div className="stat-chip wins-chip"><span>{ICONS.wins}</span><strong>{wins}</strong><small>WINS</small></div>
-        <div className="stat-chip bux-chip"><span>B</span><strong>0</strong><small>BUX</small></div>
-      </div>
-
-      <section className="left-action-grid" aria-label="Game menu">
-        <ActionTile icon={ICONS.bikes} label="Bikes" tone="tile-yellow" onClick={openGarage} detail="Garage" />
-        <ActionTile icon={ICONS.shop} label="Shop" tone="tile-blue" onClick={() => showMessage('Earn wins to unlock the bikes in your garage.')} />
-        <ActionTile icon={ICONS.rebirth} label="Rebirth" tone="tile-blue" onClick={() => showMessage('Rebirths are coming in a later update.')} />
-        <ActionTile icon={ICONS.trails} label="Trails" tone="tile-purple" onClick={() => showMessage('Trail customization is coming soon.')} />
-        <ActionTile icon={ICONS.worlds} label="Worlds" tone="tile-green" onClick={() => showMessage('World 2 unlocks at level 75.')} detail="NEW" />
-        <ActionTile icon={ICONS.wins} label="2x Wins" tone="tile-orange" onClick={() => showMessage('Win boosts are coming in a later update.')} detail="COMING SOON" />
-      </section>
+      {/* Left menu */}
+      <Art src={shopArt} box={BOX.shop} label="Shop" onClick={toggleGarage} />
+      <Art src={rebirthArt} box={BOX.rebirth} label="Rebirth" onClick={soon('Rebirths are coming in a later update.')} />
+      <Art src={trailsArt} box={BOX.trails} label="Trails" onClick={soon('Trail customization is coming soon.')} />
+      <Art src={worldsArt} box={BOX.worlds} label="Worlds" onClick={soon(level >= 75 ? 'World 2 is open. Find the gate!' : 'World 2 unlocks at level 75.')} />
+      <Art src={winsArt} box={BOX.wins} label="2x Wins" onClick={soon('Win boosts are coming in a later update.')} />
+      <StaticArt src={price75Art} box={BOX.price75} />
 
       {showGarage && (
         <div className="garage-popover">
-          <button className="garage-close" aria-label="Close garage" onClick={() => setShowGarage(false)}>X</button>
+          <button className="garage-close" aria-label="Close garage" onClick={press(() => setShowGarage(false))}>X</button>
           <BikeSection bikes={bikes} wins={wins} finishes={finishes} selectedBike={selectedBike} onSelect={onSelectBike} />
         </div>
       )}
 
-      <div className="reward-buttons">
-        <button className="reward-daily" onClick={() => showMessage('Daily rewards are coming soon.')}><span>{ICONS.rewards}</span><b>Daily<br />Rewards</b></button>
-        <button className="reward-wheel" onClick={() => showMessage('Wheelspin is coming soon.')}><span>{ICONS.wheel}</span><b>Wheelspin</b></button>
+      {/* Top-right */}
+      <Art src={dailyArt} box={BOX.daily} label="Daily Rewards" onClick={soon('Daily rewards are coming soon.')} />
+      <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={soon('Wheelspin is coming soon.')} />
+      <Art src={wavesArt} box={BOX.waves} label={wavesDisabled ? 'Enable waves' : 'Disable waves'} onClick={toggleWaves} className={wavesDisabled ? 'is-off' : ''} />
+
+      {/* Custom speed */}
+      <StaticArt src={customTitleArt} box={BOX.customTitle} />
+      <div className="hud-btn art-btn speed-bar" role="button" tabIndex={0} aria-label="Custom speed" style={boxStyle(BOX.customBar)} onClick={startEditingSpeed} onKeyDown={(event) => { if (event.key === 'Enter') startEditingSpeed(); }}>
+        <img src={customBarArt} alt="" draggable={false} />
+        {editingSpeed ? (
+          <input
+            className="speed-input outlined" type="number" min="1" max={CUSTOM_SPEED_MAX} step="1" autoFocus
+            value={speedDraft} onChange={(event) => setSpeedDraft(event.target.value)}
+            onBlur={commitSpeed} onKeyDown={onSpeedKey} onFocus={(event) => event.target.select()}
+          />
+        ) : <span className="speed-value outlined">{formatSpeed(customSpeed)}</span>}
       </div>
+      <StaticArt src={maxArt} box={BOX.max} />
 
-      <aside className="right-game-panel">
-        <div className="bux-ribbon">B 0</div>
-        <button className={`waves-button ${wavesDisabled ? 'turned-off' : ''}`} onClick={() => { const next = !wavesDisabled; setWavesDisabled(next); onWavesChange?.(next); }}>
-          <span>{wavesDisabled ? 'WAVES OFF' : 'DISABLE WAVES'}</span>
-        </button>
-        <div className="custom-speed-card">
-          <label htmlFor="custom-speed">Custom Speed</label>
-          <input id="custom-speed" type="range" min="1" max="88" value={customSpeed} onChange={(event) => onCustomSpeed(Number(event.target.value))} />
-          <div className="speed-slider-value">{customSpeed}<small>MAX: 88</small></div>
-        </div>
-        <button className={`double-speed-button ${doubleSpeed ? 'active' : ''}`} onClick={() => setDoubleSpeed((value) => !value)}><span>2x Speed</span><small>{doubleSpeed ? 'ACTIVE' : 'FREE PREVIEW'}</small></button>
-        <div className="right-utility-row">
-          <ActionTile icon={ICONS.troll} label="Troll" tone="tile-purple" onClick={() => showMessage('Troll tools are coming soon.')} />
-          <ActionTile icon={ICONS.pets} label="Pets" tone="tile-yellow" onClick={() => showMessage('Pets are coming soon.')} />
-        </div>
-      </aside>
+      <Art src={speed2xArt} box={BOX.speed2x} label="2x Speed" onClick={soon('2x Speed is a premium boost - coming soon.')} />
+      <StaticArt src={price3Art} box={BOX.price3} />
+      <Art src={petsArt} box={BOX.pets} label="Pets" onClick={soon('Pets are coming soon.')} />
+      <Art src={inventoryArt} box={BOX.inventory} label="Inventory" onClick={soon(`Equipped: ${equipped?.name ?? 'none'}. Wins: ${wins.toLocaleString()}.`)} />
+      <Art src={trollArt} box={BOX.troll} label="Troll" onClick={soon('Troll tools are coming soon.')} />
 
-      <section className="speed-readout"><strong>{speed.toLocaleString()} Speed</strong><small>RIDE TO BUILD YOUR SPEED</small></section>
-      <section className="level-meter">
-        <div className="level-fill" style={{ width: `${speed === 0 ? 0 : levelProgress}%` }} />
-        <strong>Level {level}</strong><span>{levelProgress}/100</span>
-      </section>
-      <div className="drive-hint"><b>W A S D</b> Ride <b>SPACE</b> Hop <b>SCROLL / PINCH</b> Zoom <b>RIGHT-CLICK DRAG</b> Rotate</div>
+      {/* Bottom: speed, level, speed packs */}
+      <div className="speed-readout outlined">{speed.toLocaleString()} Speed</div>
+      <div className="level-bar" style={boxStyle(BOX.levelBar)}>
+        <img className="level-empty" src={levelBarEmptyArt} alt="" draggable={false} />
+        <img className="level-full" src={levelBarArt} alt="" draggable={false} style={{ clipPath: `inset(0 ${100 - barFill}% 0 0)` }} />
+        <span className="level-name outlined">Level {level}</span>
+        <span className="level-count outlined">{levelProgress.toLocaleString()}/100</span>
+      </div>
+      <Art src={pack100kArt} box={BOX.pack100k} label="+100K speed" onClick={soon('The +100K speed pack is coming soon.')} />
+      <Art src={pack1mArt} box={BOX.pack1m} label="+1M speed" onClick={soon('The +1M speed pack is coming soon.')} />
+      <Art src={pack10mArt} box={BOX.pack10m} label="+10M speed" onClick={soon('The +10M speed pack is coming soon.')} />
+
       {toast && <div className="game-toast" role="status">{toast}</div>}
       {celebration && (
         <div className="win-celebration" role="status" aria-live="polite">

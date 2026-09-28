@@ -8,7 +8,10 @@
 // and bike to shelter underneath it while it crosses the track.
 // 2.8 units puts the pit floor below the 2.4-unit rider head height, with
 // extra clearance so a rider tucked into a gap stays under the tsunami.
-export const WAVE_TRACK = { slabs: 8, slabLength: 10, slabGrowth: 2, firstGap: 2.5, gapGrowth: 1.5, pitDepth: 2.8 };
+// The first pit (6) is wide enough for a starter bike to drop into: a rider falls past the far lip in ~0.32 s,
+// i.e. after 3-4 units at starter speed. Pits then widen by 2 and slabs lengthen by 4 per step
+// (8th pit ~20, 8th slab ~48).
+export const WAVE_TRACK = { slabs: 8, slabLength: 20, slabGrowth: 4, firstGap: 6, gapGrowth: 2, pitDepth: 2.8 };
 
 /** Length of the whole wave place, first slab to last. */
 export function waveTrackLength({ slabs, slabLength, slabGrowth, firstGap, gapGrowth }) {

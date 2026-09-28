@@ -35,8 +35,17 @@
 .speed-readout { position: absolute; bottom: calc(188 * var(--u)); left: 50%; transform: translateX(-50%); font-size: calc(42 * var(--u)); line-height: calc(46 * var(--u)); --sw: 9; }
 .level-bar { position: absolute; }
 .level-bar img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; }
-.level-name, .level-count { position: absolute; top: 50%; transform: translateY(-50%); font-size: calc(46 * var(--u)); --sw: 9; }
-.level-name { left: calc(20 * var(--u)); }
+.level-count { position: absolute; top: 50%; transform: translateY(-50%); font-size: calc(46 * var(--u)); --sw: 9; }
+/* A rounded pill badge overlapping the bar's left edge, separate from the fill underneath it. */
+.level-name {
+  position: absolute; top: 50%; left: calc(-6 * var(--u)); transform: translateY(-50%);
+  display: flex; align-items: center; height: calc(90 * var(--u));
+  padding: 0 calc(24 * var(--u)) 0 calc(30 * var(--u));
+  border-radius: 999px; border: calc(3 * var(--u)) solid #0f3f66;
+  background: linear-gradient(180deg, #7adcff, #29a9f0);
+  box-shadow: 0 calc(3 * var(--u)) 0 #0c2f4d;
+  font-size: calc(46 * var(--u)); --sw: 9;
+}
 .level-count { right: calc(18 * var(--u)); }
 
 /* Garage (opened from Shop) */

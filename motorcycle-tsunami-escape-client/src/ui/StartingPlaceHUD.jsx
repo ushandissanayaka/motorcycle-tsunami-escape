@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import BikeSection from './BikeSection.jsx';
+import { levelTarget } from '../shared/constants.js';
 import './StartingPlaceHUD.css';
 
 import trophyArt from '../assets/hud/trophy.png';
@@ -109,7 +110,8 @@ export default function StartingPlaceHUD({
   });
 
   const equipped = bikes.find((bike) => bike.id === selectedBike);
-  const barFill = speed === 0 ? 0 : levelProgress;
+  const currentLevelTarget = levelTarget(level);
+  const barFill = speed === 0 ? 0 : (levelProgress / currentLevelTarget) * 100;
 
   const startEditingSpeed = () => {
     if (editingSpeed) return;
@@ -181,7 +183,7 @@ export default function StartingPlaceHUD({
         <img className="level-empty" src={levelBarEmptyArt} alt="" draggable={false} />
         <img className="level-full" src={levelBarArt} alt="" draggable={false} style={{ clipPath: `inset(0 ${100 - barFill}% 0 0)` }} />
         <span className="level-name outlined">Level {level}</span>
-        <span className="level-count outlined">{levelProgress.toLocaleString()}/100</span>
+        <span className="level-count outlined">{levelProgress.toLocaleString()}/{currentLevelTarget.toLocaleString()}</span>
       </div>
       <Art src={pack100kArt} box={BOX.pack100k} label="+100K speed" onClick={soon('The +100K speed pack is coming soon.')} />
       <Art src={pack1mArt} box={BOX.pack1m} label="+1M speed" onClick={soon('The +1M speed pack is coming soon.')} />

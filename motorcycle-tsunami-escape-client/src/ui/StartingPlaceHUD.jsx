@@ -72,10 +72,11 @@ function StaticArt({ src, box }) {
 
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
-  speed, level, levelProgress, customSpeed, onCustomSpeed,
+  speed, level, levelProgress, customSpeed, onCustomSpeed, bikePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
 }) {
   const [showGarage, setShowGarage] = useState(false);
   const [wavesDisabled, setWavesDisabled] = useState(false);
+  const [showWavePurchase, setShowWavePurchase] = useState(false);
   const [editingSpeed, setEditingSpeed] = useState(false);
   const [speedDraft, setSpeedDraft] = useState('');
   const [toast, setToast] = useState('');
@@ -102,11 +103,18 @@ export default function StartingPlaceHUD({
   const soon = (text) => press(() => showMessage(text));
 
   const toggleGarage = press(() => setShowGarage((current) => !current));
+  const closePurchase = () => {
+    setShowWavePurchase(false);
+    onClosePurchase?.();
+  };
   const toggleWaves = press(() => {
-    const next = !wavesDisabled;
-    setWavesDisabled(next);
-    onWavesChange?.(next);
-    showMessage(next ? 'Waves disabled.' : 'Waves enabled.');
+    if (wavesDisabled) {
+      setWavesDisabled(false);
+      onWavesChange?.(false);
+      showMessage('Waves enabled.');
+      return;
+    }
+    setShowWavePurchase(true);
   });
 
   const equipped = bikes.find((bike) => bike.id === selectedBike);
@@ -156,6 +164,36 @@ export default function StartingPlaceHUD({
       <Art src={dailyArt} box={BOX.daily} label="Daily Rewards" onClick={soon('Daily rewards are coming soon.')} />
       <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={soon('Wheelspin is coming soon.')} />
       <Art src={wavesArt} box={BOX.waves} label={wavesDisabled ? 'Enable waves' : 'Disable waves'} onClick={toggleWaves} className={wavesDisabled ? 'is-off' : ''} />
+
+      {(showWavePurchase || bikePurchaseOpen || premiumBoardPurchase) && (
+        <div className="purchase-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePurchase(); }}>
+          <svg className="purchase-spinner" viewBox="0 0 100 100" role="img" aria-label="Loading">
+            <circle className="purchase-spinner-track" cx="50" cy="50" r="45" />
+            <circle className="purchase-spinner-arc" cx="50" cy="50" r="45" />
+          </svg>
+          <section className="purchase-dialog" role="dialog" aria-modal="true" aria-labelledby="wave-purchase-title">
+            <header className="purchase-header">
+              <h2 id="wave-purchase-title">Buy Robux and item</h2>
+              <span className="robux-balance" aria-label="0 Robux"><b>⬡</b> 0</span>
+              <button className="purchase-close" aria-label="Close" onClick={closePurchase}>×</button>
+            </header>
+            <div className="purchase-item">
+              {bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
+                : premiumBoardPurchase ? (
+                  <svg className="purchase-treadmill-icon" viewBox="0 0 80 68" aria-hidden="true">
+                    <path d="M11 39 53 52 69 45 27 32z" fill="#171b27" stroke="#d6d9e2" strokeWidth="2.5" />
+                    <path d="m18 41 40 12M24 36l40 12M16 42l-4 14m45-5 5 11M25 32l-2-13m-7 14 13-2m-6-12h18v11H23z" fill="none" stroke={premiumBoardPurchase === '25x' ? '#e5c4ff' : premiumBoardPurchase === '3x' ? '#ffe898' : '#c8d2e5'} strokeWidth="2.5" strokeLinejoin="round" />
+                    <path d="M27 21h10v6H27z" fill={premiumBoardPurchase === '25x' ? '#bf62ff' : premiumBoardPurchase === '3x' ? '#ffc21a' : '#438dff'} />
+                  </svg>
+                ) : <img src={wavesArt} alt="" />}
+              <div><strong>{bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
+            </div>
+            <div className="robux-offer"><span><b>⬡</b> {bikePurchaseOpen ? '1,000' : '500'} <del><b>⬡</b> {bikePurchaseOpen ? '800' : '400'}</del></span><strong>{bikePurchaseOpen ? '$9.99' : '$4.99'}</strong></div>
+            <button className="purchase-buy" onClick={() => showMessage('Purchases are not available yet.')}>Buy</button>
+            <p className="purchase-terms">Your payment method will be charged. Roblox <u>Terms of Use</u> apply.</p>
+          </section>
+        </div>
+      )}
 
       {/* Custom speed */}
       <StaticArt src={customTitleArt} box={BOX.customTitle} />

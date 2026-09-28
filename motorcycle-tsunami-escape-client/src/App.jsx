@@ -56,12 +56,15 @@ function readProfile() {
 export default function App() {
   const canvasRef = useRef(null);
   const bikeRef = useRef(null);
+  const cameraRef = useRef(null);
   const [profile, setProfile] = useState(readProfile);
   const profileRef = useRef(profile);
   profileRef.current = profile;
   const [presence, setPresence] = useState({ status: 'connecting', count: 1 });
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
   const [notice, setNotice] = useState(null);
+  const [bikePurchaseOpen, setBikePurchaseOpen] = useState(false);
+  const [premiumBoardPurchase, setPremiumBoardPurchase] = useState(null);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
 
@@ -72,6 +75,7 @@ export default function App() {
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9bdcff);
     const camera = createChaseCamera(window.innerWidth / window.innerHeight);
+    cameraRef.current = camera;
     const detachCameraControls = attachCameraControls(camera);
     const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -111,6 +115,7 @@ export default function App() {
       keys.s = false;
       keys.d = false;
       keys.space = false;
+      keys.turn = 0;
       camera.userData.steer = 0;
     };
     let speedPopupAccum = 0;
@@ -203,18 +208,22 @@ export default function App() {
       }
       const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
       const overlappingPad = checkBoostPadOverlap(world.boostPads, world.player.position);
-      const trainingPad = overlappingPad && world.player.userData.grounded && world.player.position.y < 0.8
+      const groundedOnPad = world.player.userData.grounded && world.player.position.y < 0.8;
+      const lockedPremiumBoard = [3, 9, 25, 100].includes(overlappingPad?.multiplier) && groundedOnPad;
+      const trainingPad = overlappingPad && !lockedPremiumBoard && groundedOnPad
         ? overlappingPad
         : null;
       const trainingMultiplier = trainingPad?.multiplier ?? 0;
       const trainingRate = (world.player.userData.moveSpeed || 9) * trainingMultiplier;
-      speedGainRemainder += trainingPad ? trainingRate * delta : movedDistance;
+      speedGainRemainder += lockedPremiumBoard ? 0 : trainingPad ? trainingRate * delta : movedDistance;
       const wheelDistance = keys.s && !keys.w ? -movedDistance : movedDistance;
       world.player.userData.spinWheels?.(trainingPad ? 0 : wheelDistance, delta, trainingMultiplier);
 
-      if (trainingPad !== lastTrainingPad) {
-        lastTrainingPad = trainingPad;
-        if (trainingPad) setNotice({ id: Date.now(), text: `${trainingPad.label} training active! Wheels spinning for a ${trainingPad.multiplier}x speed boost.` });
+      const trainingState = lockedPremiumBoard ? `locked-${overlappingPad.multiplier}x` : trainingPad;
+      if (trainingState !== lastTrainingPad) {
+        lastTrainingPad = trainingState;
+        if (lockedPremiumBoard) setNotice({ id: Date.now(), text: `${overlappingPad.label} Treadmill is locked. Complete the purchase to train here.` });
+        else if (trainingPad) setNotice({ id: Date.now(), text: `${trainingPad.label} training active! Wheels spinning for a ${trainingPad.multiplier}x speed boost.` });
       }
 
       const reward = world.player.userData.grounded ? world.waveTrack.rewardAt(world.player.position) : null;
@@ -257,7 +266,15 @@ export default function App() {
         lastSpeedPopupTime = nowSeconds;
       }
       updateChaseCamera(camera, world.player);
-      world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera);
+      world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera, () => {
+        camera.userData.focusPoint = new THREE.Vector3(-8.5, 4, -32.3);
+        camera.userData.zoomTarget = 0.4;
+        setBikePurchaseOpen(true);
+      }, (pad) => {
+        camera.userData.focusPoint = new THREE.Vector3(pad.position.x, 1.8, pad.position.z);
+        camera.userData.zoomTarget = 0.4;
+        setPremiumBoardPurchase(`${pad.userData.multiplier}x`);
+      });
       if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
@@ -378,6 +395,16 @@ export default function App() {
         wins={profile.wins}
         finishes={profile.finishes}
         notice={notice}
+        bikePurchaseOpen={bikePurchaseOpen}
+        premiumBoardPurchase={premiumBoardPurchase}
+        onClosePurchase={() => {
+          setBikePurchaseOpen(false);
+          setPremiumBoardPurchase(null);
+          if (cameraRef.current) {
+            cameraRef.current.userData.focusPoint = null;
+            cameraRef.current.userData.zoomTarget = 1;
+          }
+        }}
         onWavesChange={(disabled) => worldRef.current?.setWavesEnabled(!disabled)}
         selectedBike={profile.selectedBike}
         onSelectBike={selectBike}

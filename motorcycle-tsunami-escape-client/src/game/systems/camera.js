@@ -16,8 +16,8 @@ const PITCH_MAX = 1.45; // almost straight down
 
 export function createChaseCamera(aspect) {
   const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 2000);
-  // zoom / yaw / pitch ease toward their targets. yaw is a free-look offset from straight behind the rider
-  // (Q / E); `steer` collects right-drag turning, which movement.js applies to the rider's heading.
+  // zoom / world-space yaw / pitch ease toward their targets. Camera yaw is independent of rider heading,
+  // so turning the bike does not swing the camera around it. `steer` collects right-drag turning.
   camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0, steer: 0 };
   return camera;
 }
@@ -148,16 +148,17 @@ export function updateChaseCamera(camera, target) {
   const radius = Math.hypot(height, reach);
   const pitch = THREE.MathUtils.clamp(Math.atan2(height, reach) + data.pitch, PITCH_MIN, PITCH_MAX);
 
-  // Chase view: stay behind the rider's heading (plus any Q / E look-around offset), so turning swings the view too.
-  const yaw = target.rotation.y + data.yaw;
+  // Keep the camera's world-space heading stable while the rider turns beneath it.
+  const yaw = data.yaw;
   const flat = radius * Math.cos(pitch);
   const offset = new THREE.Vector3(flat * Math.sin(yaw), radius * Math.sin(pitch), flat * Math.cos(yaw));
-  const desired = offset.add(target.position);
+  const focus = data.focusPoint ?? target.position;
+  const desired = offset.add(focus);
   // Keep the camera out of the canyon wall when the rider is near an edge.
   const inside = clampToMap(desired.x, desired.z, 1.5);
   desired.x = inside.x;
   desired.z = inside.z;
   camera.position.lerp(desired, LERP);
-  const lookAt = target.position.clone().add(LOOK_OFFSET);
+  const lookAt = focus.clone().add(LOOK_OFFSET);
   camera.lookAt(lookAt);
 }

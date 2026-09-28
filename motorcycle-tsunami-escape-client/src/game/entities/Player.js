@@ -4,12 +4,32 @@ import scooterUrl from '../../assets/green-delivery-scooter.glb?url';
 import { createBike } from './Bike.js';
 import { createBlockyHuman } from './BlockyHuman.js';
 
+// Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
+const VISUAL_SCALE = 1.2;
+const RIDER_SEAT = new THREE.Vector3(0, 1.16, 0.2); // hips on the seat, sneakers on the floorboard
+// Shoulder pitch that puts the hands on the handlebar grips. The scooter's grips sit at shoulder
+// height, so its arms reach straight forward; the procedural bike's bars are lower.
+const ARM_ANGLE = { scooter: 1.58, bike: 1.1 };
+
 let scooterModelPromise;
+
+/** A white disc on the scooter's headlight, bright enough (> 1) for the bloom pass to make it glow. */
+function createHeadlight() {
+  const lamp = new THREE.Mesh(
+    new THREE.CircleGeometry(0.085, 24),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 1, 1).multiplyScalar(4), toneMapped: false }),
+  );
+  // In the GLB's own space: the lamp's front face, which points along -X.
+  lamp.position.set(-0.437, 0.6, 0);
+  lamp.rotation.y = -Math.PI / 2;
+  return lamp;
+}
 
 function loadScooterModel() {
   if (!scooterModelPromise) {
     scooterModelPromise = new GLTFLoader().loadAsync(scooterUrl).then(({ scene }) => {
       const scooter = new THREE.Group();
+      scene.add(createHeadlight());
       // The supplied GLB's front points along -X; turn it to the game's -Z forward direction
       // so the handlebar sits in front of the rider's hands.
       scene.rotation.set(0, -Math.PI / 2, 0);
@@ -57,20 +77,30 @@ function createBikeModel(bikeId) {
 /** Blocky rider on the currently equipped bike. The starter scooter is loaded from its textured GLB. */
 export function createPlayer() {
   const group = new THREE.Group();
+  const visual = new THREE.Group();
+  visual.scale.setScalar(VISUAL_SCALE);
+  group.add(visual);
+
   let bikeId = 'bike_scooter';
   let bike = createBikeModel(bikeId);
-  group.add(bike);
+  visual.add(bike);
 
   const rider = createBlockyHuman();
-  rider.position.set(0, 1.08, 0.2);
-  group.add(rider);
+  rider.position.copy(RIDER_SEAT);
+  visual.add(rider);
+  const poseArms = () => {
+    const angle = bikeId === 'bike_scooter' ? ARM_ANGLE.scooter : ARM_ANGLE.bike;
+    for (const arm of rider.userData.arms) arm.rotation.x = angle;
+  };
+  poseArms();
 
   group.userData.setBikeModel = (nextBikeId) => {
     if (!nextBikeId || nextBikeId === bikeId) return;
-    group.remove(bike);
+    visual.remove(bike);
     bikeId = nextBikeId;
     bike = createBikeModel(bikeId);
-    group.add(bike);
+    visual.add(bike);
+    poseArms();
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
   group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>

@@ -12,11 +12,11 @@ import * as THREE from 'three';
  * again - and hops outward from there, instead of centring above the head.
  */
 const DURATION = 1; // seconds, matches the reference: gone about a second after it appears
-const HAND_OFFSET = 0.55; // world units out from centre to each handlebar grip
+const HAND_OFFSET = 0.5; // world units out from centre to each handlebar grip (see Player.js)
 const HOP = 0.4; // world units the popup hops further out over its life
 const WIDTH = 1.8; // world-unit width: a little under a road-lane's width, so it reads as an on-rider effect, not a sign
 const HEIGHT = WIDTH * 0.4;
-const HOVER_HEIGHT = 1.3; // hand/handlebar height, not head height
+const HOVER_HEIGHT = 1.9; // handlebar-grip height of the scaled-up rider, not head height
 
 const textureCache = new Map();
 

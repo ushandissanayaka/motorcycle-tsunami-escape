@@ -403,12 +403,12 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     return true;
   };
 
-  const setCollectedRewards = (ids = []) => {
-    const collected = new Set(ids);
-    for (const reward of rewards) {
-      reward.claimed = collected.has(reward.id);
-      reward.rewardArt.visible = !reward.claimed;
-    }
+  /** Brings a collected trophy back so it can be collected again; called once the rider's back home. */
+  const restoreReward = (id) => {
+    const reward = rewards.find((item) => item.id === id);
+    if (!reward) return;
+    reward.claimed = false;
+    reward.rewardArt.visible = true;
   };
 
   /** Shows "Return" on the rewards this level can collect (red ones open at RED_REWARD_LEVEL). */
@@ -418,7 +418,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
   };
 
   return {
-    group, solids, pits, surfaces, rewards, rewardAt, collectReward, setCollectedRewards, setRiderLevel,
+    group, solids, pits, surfaces, rewards, rewardAt, collectReward, restoreReward, setRiderLevel,
     setWarning, ensureAhead,
     get zEnd() { return z; },
   };

@@ -7,11 +7,10 @@ import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../ut
  * further you go (`WAVE_TRACK.gapGrowth`), so riders have to clear bigger and
  * bigger gaps; a pit is a real drop (`WAVE_TRACK.pitDepth`) but a safe one: a bike
  * that misses lands unharmed on the floor and gets out by jumping at the wall. Slabs carry a yellow dashed
- * centre line, pits have left-right red and yellow trophy mats
- * (down on their floor), and pink-lavender curbs edge both sides. Yellow
+ * centre line, pits have a red trophy mat along the west wall and a yellow one along the east wall
+ * (down on their floor, running lengthwise), and pink-lavender curbs edge both sides. Yellow
  * panels are set into the east wall. The far end is open to the sky.
- * The entrance glows red and fades to black over the first stretch of the run;
- * `setWarning(true)` floods the whole track red, as when a wave is coming.
+ * Only the entrance edge glows red; `setWarning(true)` floods the whole track red, as when a wave is coming.
  */
 
 const CURB = { base: '#d8c0e2', light: '#eddcf5', dark: '#a98fbc' };
@@ -23,12 +22,17 @@ const SIDE_WALL_MIN_TOP = 5.5;
 const SIDE_WALL_TOP_RANGE = 8; // wall tops step between MIN_TOP and MIN_TOP + this
 const SIDE_WALL_WIDTH = 9;
 const SIDE_WALL_CAP_WIDTH = 10.8;
-const RED_FADE_LENGTH = 50; // red at the entrance, gone this far along the track
-const BASE_PAD_WIDTH = 6.25; // the mat's size in the first pit
+const RED_FADE_LENGTH = 6; // red glow at the entrance edge, gone this far along the track
+// Mats hug the side walls and run along the track, as in the zoomed-out reference: ~4.6 wide
+// (just under a tenth of the track) and ~70% as long as their pit.
+const PAD_WIDTH = 4.6;
+const PAD_LENGTH_FRACTION = 0.7;
+const PAD_WALL_INSET = 0.6; // gap between a mat and its side wall
+const BASE_PAD_WIDTH = 6.25; // trophy / label size reference
 const BASE_PAD_DEPTH = 2.2;
-const PAD_ASPECT = 2.1; // mats are about twice as wide as deep
-const MAX_PAD_DEPTH = 9; // full-size mat: 19 x 9 on the 50-wide track
-const MAX_PAD_WIDTH_FRACTION = 0.38;
+const DASH_WIDTH = 0.5;
+const DASH_LENGTH = 4;
+const DASH_SPACING = 8;
 const TROPHY_SCALE = 1.3; // trophy size at the base mat size (it was 0.88)
 const SURFACE = 0.1; // height of the road surface, which the slab tops are flush with
 const TROPHY_GOLD = new THREE.MeshStandardMaterial({ color: 0xffd62e, metalness: 0.72, roughness: 0.24, emissive: 0x8a5a00, emissiveIntensity: 0.28 });
@@ -190,8 +194,8 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     for (const side of [-1, 1]) {
       box(CURB_WIDTH, 0.06, length, curb, centerX + side * (width / 2 - CURB_WIDTH / 2), slabTop + 0.03, midZ);
     }
-    for (let dz = z - 1.5; dz > zBack + 1; dz -= 4) {
-      const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.25, 2), dashMaterial);
+    for (let dz = z - DASH_LENGTH / 2 - 1; dz > zBack + DASH_LENGTH / 2; dz -= DASH_SPACING) {
+      const dash = new THREE.Mesh(new THREE.PlaneGeometry(DASH_WIDTH, DASH_LENGTH), dashMaterial);
       dash.rotation.x = -Math.PI / 2;
       dash.position.set(centerX, slabTop + 0.075, dz);
       group.add(dash);
@@ -210,15 +214,15 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
         box(1, columnHeight - 0.02, gap, asphalt, centerX + side * (width / 2 + 0.5), columnY - 0.01, gapMid);
         box(CURB_WIDTH, 0.07, gap, curb, centerX + side * (width / 2 - CURB_WIDTH / 2), floorTop + 0.035, gapMid);
       }
-      // The mats grow with the pit until they reach their full size (about 38% of the track wide, 2:1, as seen zoomed out).
-      const padDepth = Math.min(gap * 0.88, MAX_PAD_DEPTH);
-      const padWidth = THREE.MathUtils.clamp(padDepth * PAD_ASPECT, BASE_PAD_WIDTH, width * MAX_PAD_WIDTH_FRACTION);
+      // Mats run lengthwise against the side walls and lengthen with the pit.
+      const padDepth = gap * PAD_LENGTH_FRACTION;
+      const padWidth = PAD_WIDTH;
       const rewardScale = Math.min(padWidth / BASE_PAD_WIDTH, padDepth / BASE_PAD_DEPTH); // trophy and label grow with the mat
       for (const [xSide, materialColor, wins, sideName] of [
         [-1, PAD_RED, (i + 1) * 2, 'red'],
         [1, PAD_YELLOW, (i + 1) * 2 + 1, 'yellow'],
       ]) {
-        const padX = centerX + xSide * width / 4;
+        const padX = centerX + xSide * (width / 2 - PAD_WALL_INSET - padWidth / 2);
         const padZ = gapMid;
         const pickup = new THREE.Group();
         pickup.position.set(padX, floorTop + 0.08, padZ);

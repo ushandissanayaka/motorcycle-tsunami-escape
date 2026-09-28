@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { STEP_HEIGHT } from './collision.js';
 import { clampToMap } from '../../shared/constants.js';
 
-const TURN_SPEED = 2.4; // radians/sec
+const TURN_SPEED = 1.9; // radians/sec: a gentle arc, not a spin on the spot
 const MOVE_SPEED = 12; // units/sec, tune per your world scale
 const JUMP_SPEED = 6; // units/sec upward
 const GRAVITY = 16; // units/sec^2
@@ -79,15 +79,34 @@ function stepVertical(target, dt, collision) {
   }
 }
 
-/** Free-roam hub movement: W/S drive forward/back, A/D turn, Space jumps. Pass a
+/** Free-roam hub movement: W/S drive forward/back, A/D steer left/right (on their own they also drive
+ * forward, so the bike curves that way), Space jumps. Right-drag on the camera steers while driving and
+ * orbits the view around the standing rider otherwise. Pass a
  * `collision` (systems/collision.js) to ride up ramps, be stopped by walls and
  * drop into pits (and hop back out of them). Falling is integrated in every sub-step of the drive, so a
- * rider fast enough to cross a pit before gravity pulls them down clears it.
- * Swap for lane-strafe controls once you build the endless-runner
- * road scene. */
+ * rider fast enough to cross a pit before gravity pulls them down clears it. */
 export function updateMovement(target, keys, deltaSeconds, collision = null, camera = null) {
   if (keys.a) target.rotation.y += TURN_SPEED * deltaSeconds;
   if (keys.d) target.rotation.y -= TURN_SPEED * deltaSeconds;
+
+  // W / S drive; A or D alone (exactly one, no W / S) drives forward along the turn.
+  let throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+  if (!keys.w && !keys.s && keys.a !== keys.d) throttle = 1;
+  const driving = throttle !== 0 || keys.a || keys.d;
+
+  const view = camera?.userData;
+  if (view?.steer) {
+    if (driving) {
+      target.rotation.y += view.steer;
+    } else {
+      // Standing still: swing the camera around the rider and bike without turning them.
+      view.yaw += view.steer;
+      view.yawTarget += view.steer;
+    }
+    view.steer = 0;
+  }
+  // Driving brings the view back behind the rider after looking around.
+  if (view && driving) view.yawTarget = 0;
 
   target.userData.jumpVelocity ??= 0;
   target.userData.grounded ??= true;
@@ -103,10 +122,10 @@ export function updateMovement(target, keys, deltaSeconds, collision = null, cam
     target.userData.grounded = false;
   }
 
-  // Drive along the bike's heading. Camera orbit is independent of bike steering.
+  // Drive along the bike's heading, which the chase camera follows.
   const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), target.rotation.y);
   const speed = target.userData.moveSpeed || MOVE_SPEED;
-  const drive = (keys.w ? speed : 0) - (keys.s ? speed * 0.6 : 0);
+  const drive = throttle > 0 ? speed : throttle < 0 ? -speed * 0.6 : 0;
   const distance = Math.abs(drive) * deltaSeconds;
   const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
   const stepX = forward.x * Math.sign(drive) * distance / steps;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import BikeSection from './BikeSection.jsx';
+import MenuPopups from './MenuPopups.jsx';
 import { levelTarget } from '../shared/constants.js';
 import './StartingPlaceHUD.css';
 
@@ -72,9 +72,10 @@ function StaticArt({ src, box }) {
 
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
-  speed, level, levelProgress, customSpeed, onCustomSpeed, bikePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
+  speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
 }) {
-  const [showGarage, setShowGarage] = useState(false);
+  const [menuPopup, setMenuPopup] = useState('daily'); // greet the player with Daily Rewards on load
+  const [shopPurchase, setShopPurchase] = useState(null);
   const [wavesDisabled, setWavesDisabled] = useState(false);
   const [showWavePurchase, setShowWavePurchase] = useState(false);
   const [editingSpeed, setEditingSpeed] = useState(false);
@@ -102,8 +103,9 @@ export default function StartingPlaceHUD({
   };
   const soon = (text) => press(() => showMessage(text));
 
-  const toggleGarage = press(() => setShowGarage((current) => !current));
+  const toggleMenu = (name) => press(() => setMenuPopup((current) => (current === name ? null : name)));
   const closePurchase = () => {
+    setShopPurchase(null);
     setShowWavePurchase(false);
     onClosePurchase?.();
   };
@@ -117,7 +119,7 @@ export default function StartingPlaceHUD({
     setShowWavePurchase(true);
   });
 
-  const equipped = bikes.find((bike) => bike.id === selectedBike);
+  const bigOffer = bikePurchaseOpen || (shopPurchase?.price ?? 0) > 500;
   const currentLevelTarget = levelTarget(level);
   const barFill = speed === 0 ? 0 : (levelProgress / currentLevelTarget) * 100;
 
@@ -146,26 +148,25 @@ export default function StartingPlaceHUD({
       </button>
 
       {/* Left menu */}
-      <Art src={shopArt} box={BOX.shop} label="Shop" onClick={toggleGarage} />
-      <Art src={rebirthArt} box={BOX.rebirth} label="Rebirth" onClick={soon('Rebirths are coming in a later update.')} />
-      <Art src={trailsArt} box={BOX.trails} label="Trails" onClick={soon('Trail customization is coming soon.')} />
-      <Art src={worldsArt} box={BOX.worlds} label="Worlds" onClick={soon(level >= 75 ? 'World 2 is open. Find the gate!' : 'World 2 unlocks at level 75.')} />
+      <Art src={shopArt} box={BOX.shop} label="Shop" onClick={toggleMenu('shop')} />
+      <Art src={rebirthArt} box={BOX.rebirth} label="Rebirth" onClick={toggleMenu('rebirth')} />
+      <Art src={trailsArt} box={BOX.trails} label="Trails" onClick={toggleMenu('trails')} />
+      <Art src={worldsArt} box={BOX.worlds} label="Worlds" onClick={toggleMenu('worlds')} />
       <Art src={winsArt} box={BOX.wins} label="2x Wins" onClick={soon('Win boosts are coming in a later update.')} />
       <StaticArt src={price75Art} box={BOX.price75} />
 
-      {showGarage && (
-        <div className="garage-popover">
-          <button className="garage-close" aria-label="Close garage" onClick={press(() => setShowGarage(false))}>X</button>
-          <BikeSection bikes={bikes} wins={wins} finishes={finishes} selectedBike={selectedBike} onSelect={onSelectBike} />
-        </div>
-      )}
+      <MenuPopups
+        popup={menuPopup} level={level} onClose={() => setMenuPopup(null)} onBuy={setShopPurchase} onMessage={showMessage}
+        onGrantSpeed={onGrantSpeed} onGrantWins={onGrantWins}
+        bikes={bikes} wins={wins} finishes={finishes} selectedBike={selectedBike} onSelectBike={onSelectBike}
+      />
 
       {/* Top-right */}
-      <Art src={dailyArt} box={BOX.daily} label="Daily Rewards" onClick={soon('Daily rewards are coming soon.')} />
-      <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={soon('Wheelspin is coming soon.')} />
+      <Art src={dailyArt} box={BOX.daily} label="Daily Rewards" onClick={toggleMenu('daily')} />
+      <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={toggleMenu('wheel')} />
       <Art src={wavesArt} box={BOX.waves} label={wavesDisabled ? 'Enable waves' : 'Disable waves'} onClick={toggleWaves} className={wavesDisabled ? 'is-off' : ''} />
 
-      {(showWavePurchase || bikePurchaseOpen || premiumBoardPurchase) && (
+      {(showWavePurchase || bikePurchaseOpen || premiumBoardPurchase || shopPurchase) && (
         <div className="purchase-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePurchase(); }}>
           <svg className="purchase-spinner" viewBox="0 0 100 100" role="img" aria-label="Loading">
             <circle className="purchase-spinner-track" cx="50" cy="50" r="45" />
@@ -178,7 +179,8 @@ export default function StartingPlaceHUD({
               <button className="purchase-close" aria-label="Close" onClick={closePurchase}>×</button>
             </header>
             <div className="purchase-item">
-              {bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
+              {shopPurchase ? <img src={shopPurchase.img} alt="" />
+                : bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
                 : premiumBoardPurchase ? (
                   <svg className="purchase-treadmill-icon" viewBox="0 0 80 68" aria-hidden="true">
                     <path d="M11 39 53 52 69 45 27 32z" fill="#171b27" stroke="#d6d9e2" strokeWidth="2.5" />
@@ -186,9 +188,9 @@ export default function StartingPlaceHUD({
                     <path d="M27 21h10v6H27z" fill={premiumBoardPurchase === '25x' ? '#bf62ff' : premiumBoardPurchase === '3x' ? '#ffc21a' : '#438dff'} />
                   </svg>
                 ) : <img src={wavesArt} alt="" />}
-              <div><strong>{bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
+              <div><strong>{shopPurchase ? shopPurchase.name : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {shopPurchase ? shopPurchase.price : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
             </div>
-            <div className="robux-offer"><span><b>⬡</b> {bikePurchaseOpen ? '1,000' : '500'} <del><b>⬡</b> {bikePurchaseOpen ? '800' : '400'}</del></span><strong>{bikePurchaseOpen ? '$9.99' : '$4.99'}</strong></div>
+            <div className="robux-offer"><span><b>⬡</b> {bigOffer ? '1,000' : '500'} <del><b>⬡</b> {bigOffer ? '800' : '400'}</del></span><strong>{bigOffer ? '$9.99' : '$4.99'}</strong></div>
             <button className="purchase-buy" onClick={() => showMessage('Purchases are not available yet.')}>Buy</button>
             <p className="purchase-terms">Your payment method will be charged. Roblox <u>Terms of Use</u> apply.</p>
           </section>
@@ -211,8 +213,8 @@ export default function StartingPlaceHUD({
 
       <Art src={speed2xArt} box={BOX.speed2x} label="2x Speed" onClick={soon('2x Speed is a premium boost - coming soon.')} />
       <StaticArt src={price3Art} box={BOX.price3} />
-      <Art src={petsArt} box={BOX.pets} label="Pets" onClick={soon('Pets are coming soon.')} />
-      <Art src={inventoryArt} box={BOX.inventory} label="Inventory" onClick={soon(`Equipped: ${equipped?.name ?? 'none'}. Wins: ${wins.toLocaleString()}.`)} />
+      <Art src={petsArt} box={BOX.pets} label="Pets" onClick={toggleMenu('pets')} />
+      <Art src={inventoryArt} box={BOX.inventory} label="Inventory" onClick={toggleMenu('inventory')} />
       <Art src={trollArt} box={BOX.troll} label="Troll" onClick={soon('Troll tools are coming soon.')} />
 
       {/* Bottom: speed, level, speed packs */}

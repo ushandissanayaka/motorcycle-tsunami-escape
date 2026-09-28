@@ -481,6 +481,7 @@ export function createLeaderboards(placements) {
     };
 
     const onWheel = (event) => {
+      if (event.target instanceof Element && event.target.closest('.menu-popup')) return;
       const hit = pick(event);
       if (!hit) return;
       event.preventDefault();
@@ -490,6 +491,7 @@ export function createLeaderboards(placements) {
     };
     const onPointerDown = (event) => {
       if (event.button !== 0) return;
+      if (event.target instanceof Element && event.target.closest('.menu-popup')) return;
       const hit = pick(event);
       if (hit) drag = { id: event.pointerId, board: hit.board, v: hit.uv.y };
     };

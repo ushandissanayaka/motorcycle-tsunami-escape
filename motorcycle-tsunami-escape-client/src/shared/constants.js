@@ -1,11 +1,9 @@
-// Level 1 starts at 50, each level needing ~13.7% more than the last, landing on 2677 at level 32
-// (matched to a similar game's curve). LEVEL_GROWTH is picked so 50 * LEVEL_GROWTH^31 = 2677 exactly.
-const LEVEL_BASE = 50;
-const LEVEL_GROWTH = (2677 / LEVEL_BASE) ** (1 / 31);
+// Each level needs 50 more speed progress than the previous level.
+const LEVEL_BASE = 1000;
 
-/** Speed progress needed to finish `level` and reach the next one: 50, 57, 65, 73, 84, 95, 108, ... */
+/** Speed progress needed per level: 1000, 1050, 1100, 1150, ... */
 export function levelTarget(level) {
-  return Math.round(LEVEL_BASE * LEVEL_GROWTH ** (level - 1));
+  return LEVEL_BASE + (level - 1) * 50;
 }
 
 /**

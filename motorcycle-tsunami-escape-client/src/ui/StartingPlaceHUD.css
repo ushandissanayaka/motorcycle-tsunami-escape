@@ -8,15 +8,36 @@
   font-family: 'Fredoka', 'Lilita One', 'Arial Black', Arial, sans-serif; font-weight: 700;
 }
 .starting-hud button, .starting-hud input { font: inherit; }
-.hud-btn, .hud-static, .garage-popover { pointer-events: auto; }
+.hud-btn, .hud-static { pointer-events: auto; }
 
 .hud-btn { position: absolute; padding: 0; border: 0; background: none; color: #fff; cursor: pointer; transition: scale .1s ease, filter .1s ease; }
 .hud-btn:hover { scale: 1.05; filter: brightness(1.08); }
 .hud-btn:active { scale: .96; }
 .hud-btn:focus-visible { outline: calc(3 * var(--u)) solid #fff; outline-offset: calc(2 * var(--u)); }
 .hud-static { position: absolute; pointer-events: none; user-select: none; }
+.art-btn { overflow: hidden; }
 .art-btn img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
 .art-btn.is-off img { filter: grayscale(1) brightness(.8); }
+
+/* Hover flourish: the icon wiggles briefly and a shine streak sweeps corner to corner. The
+   card itself (this button's position/size) never moves; only its contents animate. */
+.art-btn:hover img { animation: hud-icon-wiggle .5s ease-in-out; }
+@keyframes hud-icon-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-10deg); }
+  50% { transform: rotate(8deg); }
+  75% { transform: rotate(-5deg); }
+}
+.art-btn::after {
+  content: ''; position: absolute; inset: -15%; pointer-events: none; opacity: 0;
+  background: linear-gradient(135deg, transparent 44%, rgba(255,255,255,.85) 49%, rgba(255,255,255,.85) 51%, transparent 56%);
+  transform: translate(-70%, -70%);
+}
+.art-btn:hover::after { animation: hud-shine .6s ease-out; }
+@keyframes hud-shine {
+  0% { opacity: 1; transform: translate(-70%, -70%); }
+  100% { opacity: 0; transform: translate(70%, 70%); }
+}
 
 /* White text with a heavy dark outline, drawn behind the fill. */
 .outlined { color: #fff; -webkit-text-stroke: calc(var(--sw, 8) * var(--u)) #0c0c0c; paint-order: stroke fill; line-height: 1; white-space: nowrap; }
@@ -48,15 +69,8 @@
 }
 .level-count { right: calc(18 * var(--u)); }
 
-/* Garage (opened from Shop) */
-.garage-popover { position: absolute; z-index: 5; top: calc(365 * var(--u)); left: calc(322 * var(--u)); width: 330px; padding: 9px; border: 3px solid #111827; border-radius: 17px; background: #151e2bef; box-shadow: 0 8px 24px #0008; font-family: Arial, system-ui, sans-serif; }
-.garage-popover .bike-panel { position: static; width: 100%; padding: 10px; transform: none; border: 0; background: transparent; box-shadow: none; backdrop-filter: none; }
-.garage-popover .bike-card { height: 58px; }
-.garage-popover .bike-art { height: 42px; }
-.garage-close { position: absolute; z-index: 2; top: 7px; right: 7px; width: 25px; height: 25px; border: 2px solid #111827; border-radius: 50%; background: #ff5158; color: white; font-size: 11px !important; font-weight: 1000; cursor: pointer; }
-
 .game-toast {
-  position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%);
+  position: absolute; z-index: 7; top: 48%; left: 50%; transform: translate(-50%, -50%);
   max-width: min(80vw, 700px); padding: 13px 26px; text-align: center;
   /* Same white-fill, black-stroke letter style as the rest of the HUD's big numbers (.outlined), just wrapped for longer messages. No background box: the stroke alone keeps it readable over gameplay. */
   color: #fff; -webkit-text-stroke: calc(7 * var(--u)) #0c0c0c; paint-order: stroke fill;

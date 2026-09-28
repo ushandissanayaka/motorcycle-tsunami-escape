@@ -11,7 +11,7 @@ import { attachCameraControls, createChaseCamera, updateChaseCamera } from './ga
 import { createInputState, updateMovement } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
-import { BIKES, isBikeUnlocked, requirementText, rideColor } from './shared/constants.js';
+import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget } from './shared/constants.js';
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
@@ -44,7 +44,7 @@ function readProfile() {
     profile.speed = Number.isFinite(profile.speed) ? Math.max(0, profile.speed) : freshProfile.speed;
     profile.level = Number.isFinite(profile.level) ? Math.max(1, profile.level) : freshProfile.level;
     profile.levelProgress = Number.isFinite(profile.levelProgress)
-      ? Math.max(0, Math.min(99, profile.levelProgress))
+      ? Math.max(0, Math.min(levelTarget(profile.level) - 1, profile.levelProgress))
       : freshProfile.levelProgress;
     if (profile.speed === 0) profile.levelProgress = 0;
     // Saves from before the bike store may name a bike that no longer exists.
@@ -235,10 +235,16 @@ export default function App() {
         speedGainRemainder -= earnedSpeed;
         speedProgress += earnedSpeed;
         speedPopupAccum += earnedSpeed;
-        const levelTotal = levelProgress + earnedSpeed;
-        const levelsGained = Math.floor(levelTotal / 100);
+        // Each level needs more than the last (see levelTarget), so a big jump (a speed pack) can
+        // clear several at once; the leftover carries into the new level's own, bigger bar.
+        let levelTotal = levelProgress + earnedSpeed;
+        let levelsGained = 0;
+        while (levelTotal >= levelTarget(riderLevel + levelsGained)) {
+          levelTotal -= levelTarget(riderLevel + levelsGained);
+          levelsGained += 1;
+        }
         riderLevel += levelsGained;
-        levelProgress = levelTotal % 100;
+        levelProgress = levelTotal;
         setProfile((current) => ({ ...current, speed: speedProgress, level: riderLevel, levelProgress }));
         if (levelsGained > 0) {
           setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });

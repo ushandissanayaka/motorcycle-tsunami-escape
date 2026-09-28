@@ -143,7 +143,7 @@ const halo = () => {
  * One side of a block: the art split into left wing, body and right wing sprites. `face` is { art, size, split, cubeY? }
  * (`cubeY` is the cube's top and bottom row in the art, so different arts can be lined up on the cube).
  */
-function buildFace(face, unit) {
+function buildFace(face, unit, { volume = false, reverse = false, bodyDepth = 0 } = {}) {
   const [artWidth, artHeight] = face.size;
   const [bodyLeft, bodyRight] = face.split;
 
@@ -192,6 +192,21 @@ function buildFace(face, unit) {
   // Lift or lower the art so the cube's centre sits at the group's origin.
   if (face.cubeY) group.position.y = ((face.cubeY[0] + face.cubeY[1]) / 2 - artHeight / 2) * unit;
 
+  const boxDepth = (bodyRight - bodyLeft) * unit * 0.58;
+  const frontZ = reverse ? -bodyDepth - 0.025 : 0.025;
+  if (volume) {
+    const boxHeight = (face.cubeY ? face.cubeY[1] - face.cubeY[0] : bodyRight - bodyLeft) * unit;
+    const baseColor = face.rarityColor ?? 0xffb52c;
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry((bodyRight - bodyLeft) * unit, boxHeight, boxDepth),
+      new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.56, metalness: 0.12, emissive: baseColor, emissiveIntensity: 0.1 }),
+    );
+    body.position.set(parts.body.x, 0, -boxDepth / 2);
+    body.castShadow = true;
+    body.receiveShadow = true;
+    group.add(body);
+  }
+
   const pivots = {};
   for (const [key, part] of Object.entries(parts)) {
     // These are world-facing planes, not camera-facing sprites. Sprites stay flat toward
@@ -203,6 +218,7 @@ function buildFace(face, unit) {
       new THREE.MeshBasicMaterial({ map: part.texture, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
     );
     mesh.position.x = part.pivot === 0 ? part.width / 2 : part.pivot === 1 ? -part.width / 2 : 0;
+    mesh.position.z = frontZ;
     mesh.renderOrder = key === 'body' ? 2 : 1;
     pivot.add(mesh);
     group.add(pivot);
@@ -213,7 +229,7 @@ function buildFace(face, unit) {
     const part = parts[key];
     const pivot = pivots[key];
     const turn = side * angle;
-    pivot.position.set(part.shoulder, 0, 0);
+    pivot.position.set(part.shoulder, 0, frontZ);
     pivot.rotation.z = turn;
   };
   parts.left.shoulder = (bodyLeft - artWidth / 2) * unit + WING_OVERLAP * unit; // where the wing meets the body
@@ -235,8 +251,13 @@ const facing = new THREE.Vector3();
  */
 export function createWingedBlock(def, { width, labelWidth, labelLift }) {
   const unit = width / def.size[0]; // world units per art pixel
-  const front = buildFace(def, unit);
-  const back = def.back ? buildFace(def.back, (unit * (def.split[1] - def.split[0])) / (def.back.split[1] - def.back.split[0])) : null;
+  const bodyDepth = (def.split[1] - def.split[0]) * unit * 0.58;
+  const front = buildFace(def, unit, { volume: true });
+  const back = def.back ? buildFace(
+    def.back,
+    (unit * (def.split[1] - def.split[0])) / (def.back.split[1] - def.back.split[0]),
+    { reverse: true, bodyDepth },
+  ) : null;
 
   const holder = new THREE.Group();
   const rig = new THREE.Group(); // bobs up and down; the wings and body ride on it

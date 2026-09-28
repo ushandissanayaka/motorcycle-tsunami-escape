@@ -2,21 +2,30 @@ import * as THREE from 'three';
 import { STEP_HEIGHT } from './collision.js';
 import { clampToMap } from '../../shared/constants.js';
 
-const TURN_SPEED = 1.9; // radians/sec: a gentle arc, not a spin on the spot
 const MOVE_SPEED = 12; // units/sec, tune per your world scale
+const TURN_RATE = 5; // radians/sec; eases discrete A/D and U-turn inputs so the chase camera follows smoothly
 const JUMP_SPEED = 6; // units/sec upward
 const GRAVITY = 16; // units/sec^2
 
 export function createInputState() {
-  const keys = { w: false, a: false, s: false, d: false, space: false };
+  const keys = { w: false, a: false, s: false, d: false, space: false, turn: 0 };
 
   const onKey = (down) => (e) => {
     if (e.code === 'Space' && !(e.target instanceof HTMLInputElement && e.target.type === 'text')) e.preventDefault();
     switch (e.code) {
       case 'KeyW': keys.w = down; break;
-      case 'KeyA': keys.a = down; break;
-      case 'KeyS': keys.s = down; break;
-      case 'KeyD': keys.d = down; break;
+      case 'KeyA':
+        keys.a = down;
+        if (down && !e.repeat) keys.turn += Math.PI / 6;
+        break;
+      case 'KeyS':
+        keys.s = down;
+        if (down && !e.repeat) keys.turn += Math.PI;
+        break;
+      case 'KeyD':
+        keys.d = down;
+        if (down && !e.repeat) keys.turn -= Math.PI / 6;
+        break;
       case 'Space': keys.space = down; break;
       default: break;
     }
@@ -79,20 +88,27 @@ function stepVertical(target, dt, collision) {
   }
 }
 
-/** Free-roam hub movement: W/S drive forward/back, A/D steer left/right (on their own they also drive
- * forward, so the bike curves that way), Space jumps. Right-drag on the camera steers while driving and
+/** Free-roam hub movement: W drives forward, S turns around by 180 degrees, A/D rotate by 30 degrees per press, Space jumps.
+ * Right-drag on the camera steers while driving and
  * orbits the view around the standing rider otherwise. Pass a
  * `collision` (systems/collision.js) to ride up ramps, be stopped by walls and
  * drop into pits (and hop back out of them). Falling is integrated in every sub-step of the drive, so a
  * rider fast enough to cross a pit before gravity pulls them down clears it. */
 export function updateMovement(target, keys, deltaSeconds, collision = null, camera = null) {
-  if (keys.a) target.rotation.y += TURN_SPEED * deltaSeconds;
-  if (keys.d) target.rotation.y -= TURN_SPEED * deltaSeconds;
+  target.userData.turnRemaining = (target.userData.turnRemaining || 0) + (keys.turn || 0);
+  keys.turn = 0;
+  const remainingTurn = target.userData.turnRemaining;
+  if (remainingTurn) {
+    const turnStep = Math.abs(remainingTurn) <= TURN_RATE * deltaSeconds
+      ? remainingTurn
+      : Math.sign(remainingTurn) * TURN_RATE * deltaSeconds;
+    target.rotation.y += turnStep;
+    target.userData.turnRemaining = Math.abs(remainingTurn) <= TURN_RATE * deltaSeconds ? 0 : remainingTurn - turnStep;
+  }
 
-  // W / S drive; A or D alone (exactly one, no W / S) drives forward along the turn.
-  let throttle = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
-  if (!keys.w && !keys.s && keys.a !== keys.d) throttle = 1;
-  const driving = throttle !== 0 || keys.a || keys.d;
+  // Steering keys turn in place; W is the only drive input.
+  const throttle = keys.w && !target.userData.turnRemaining ? 1 : 0;
+  const driving = throttle !== 0;
 
   const view = camera?.userData;
   if (view?.steer) {

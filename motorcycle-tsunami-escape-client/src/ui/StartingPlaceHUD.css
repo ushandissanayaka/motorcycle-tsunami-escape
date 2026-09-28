@@ -62,3 +62,43 @@
   color: #fff; -webkit-text-stroke: calc(7 * var(--u)) #0c0c0c; paint-order: stroke fill;
   font-size: calc(40 * var(--u)); line-height: 1.25; white-space: normal;
 }
+
+/* Disable Waves item purchase screen */
+.purchase-overlay {
+  position: fixed; z-index: 20; inset: 0; display: grid; place-items: center;
+  background: rgb(0 0 0 / 78%); pointer-events: auto; font-family: Arial, Helvetica, sans-serif;
+}
+.purchase-spinner {
+  position: absolute; width: min(660px, 72vw, 78vh); overflow: visible;
+  animation: purchase-spin 4s linear infinite;
+}
+.purchase-spinner-track, .purchase-spinner-arc { fill: none; stroke-width: 7; }
+.purchase-spinner-track { stroke: rgb(255 255 255 / 24%); }
+.purchase-spinner-arc { stroke: #fff; stroke-dasharray: 64 219; stroke-linecap: round; }
+@keyframes purchase-spin { to { transform: rotate(360deg); } }
+.purchase-dialog {
+  position: relative; width: min(458px, calc(100vw - 32px)); box-sizing: border-box; padding: 17px 20px 18px;
+  border: 1px solid #35363c; border-radius: 19px; background: #1b1c22; color: #f5f5f7;
+  box-shadow: 0 16px 48px #0008;
+}
+.purchase-header { display: flex; align-items: center; height: 26px; gap: 17px; }
+.purchase-header h2 { flex: 1; margin: 0; font-size: 20px; line-height: 1; font-weight: 700; }
+.robux-balance { white-space: nowrap; color: #f3f3f5; font-size: 14px; }
+.robux-balance b, .purchase-item span b, .robux-offer b { font-size: 16px; }
+.purchase-close { width: 27px; height: 27px; padding: 0; border: 0; background: none; color: #e7e7e9; font-size: 29px; line-height: 24px; cursor: pointer; }
+.purchase-item { display: flex; align-items: center; gap: 12px; height: 87px; }
+.purchase-item img { width: 68px; height: 68px; object-fit: contain; }
+.purchase-bike-icon { display: grid; width: 68px; height: 68px; place-items: center; font-size: 43px; filter: drop-shadow(0 2px 3px #0008); }
+.purchase-treadmill-icon { width: 68px; height: 68px; filter: drop-shadow(0 2px 3px #0008); }
+.purchase-item div { display: grid; gap: 5px; font-size: 14px; }
+.purchase-item span { display: flex; align-items: center; gap: 6px; color: #f2f2f4; }
+.robux-offer { display: flex; align-items: center; justify-content: space-between; height: 58px; box-sizing: border-box; padding: 0 18px;
+  border: 1.5px solid #eeeef0; border-radius: 11px; font-size: 16px; font-weight: 700; }
+.robux-offer del { margin-left: 8px; color: #aaaab1; }
+.purchase-buy { width: 100%; height: 40px; margin-top: 50px; border: 0; border-radius: 9px; background: #335fff; color: white; font-size: 14px; cursor: pointer; }
+.purchase-buy:hover { background: #4770ff; }
+.purchase-terms { margin: 12px 0 0; color: #b8b8c0; text-align: center; font-size: 10px; }
+@media (max-width: 520px) {
+  .purchase-dialog { padding: 15px; }
+  .purchase-header h2 { font-size: 17px; }
+}

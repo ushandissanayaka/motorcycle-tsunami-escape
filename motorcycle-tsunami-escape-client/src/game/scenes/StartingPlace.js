@@ -135,6 +135,7 @@ export function buildStartingPlace(scene) {
     [...trainingSurfaces, ...waveTrack.surfaces]
   );
   let knownWaveSolids = waveTrack.solids.length;
+  let insidePremiumBoard = null;
 
   // Sea beyond the open end of the corridor; the tsunami rolls in from far out on it.
   // Keep the distant sea below the pit floors so the gray trench remains dry and visible.
@@ -164,6 +165,7 @@ export function buildStartingPlace(scene) {
   const display = createBikeDisplay({ bikeId: 'bike_aetherune', name: 'Aetherune Bike', price: '699' });
   display.group.position.set(11.8, 0, -22.1); // on the east strip, north end, as in the reference
   scene.add(display.group);
+  let insideAstralwingRing = false;
 
   const nextEvent = createNextEventBoard();
   nextEvent.group.position.set(NEXT_EVENT_POSITION.x, NEXT_EVENT_POSITION.y, NEXT_EVENT_POSITION.z);
@@ -171,7 +173,7 @@ export function buildStartingPlace(scene) {
   scene.add(nextEvent.group);
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
-  const update = (time, onStorePad, camera) => {
+  const update = (time, onStorePad, camera, onAstralwingRing, onPremiumBoard) => {
     waveTrack.ensureAhead(player.position.z);
     if (waveTrack.solids.length > knownWaveSolids) {
       collision.solids.push(...waveTrack.solids.slice(knownWaveSolids));
@@ -180,6 +182,16 @@ export function buildStartingPlace(scene) {
     boostPads.forEach((board) => board.userData.update(time));
     store.update(time, player, onStorePad);
     display.update(time);
+    const ringX = (player.position.x + 8.5) / 6.4;
+    const ringZ = (player.position.z + 32.3) / 3.2;
+    const insideRing = ringX * ringX + ringZ * ringZ < 1;
+    if (insideRing && !insideAstralwingRing) onAstralwingRing?.();
+    insideAstralwingRing = insideRing;
+    const premiumBoard = boostPads.find((pad) => [3, 9, 25, 100].includes(pad.userData.multiplier)
+      && Math.abs(player.position.x - pad.position.x) < pad.userData.halfSize.x + 2
+      && Math.abs(player.position.z - pad.position.z) < pad.userData.halfSize.z + 2);
+    if (premiumBoard && premiumBoard !== insidePremiumBoard) onPremiumBoard?.(premiumBoard);
+    insidePremiumBoard = premiumBoard ?? null;
     stage.update(time);
     leaderboards.update();
     chestArea.update(time, camera);

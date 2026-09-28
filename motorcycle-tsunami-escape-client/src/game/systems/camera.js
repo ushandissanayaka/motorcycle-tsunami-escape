@@ -43,7 +43,7 @@ export function attachCameraControls(camera) {
     data.pitch = data.pitchTarget;
   };
   // Scrolling or dragging inside HUD panels must not move the world camera.
-  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel');
+  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel, .menu-popup');
 
   const onWheel = (event) => {
     if (overPanel(event)) return;

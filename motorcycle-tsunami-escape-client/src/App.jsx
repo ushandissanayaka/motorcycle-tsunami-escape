@@ -59,6 +59,7 @@ export default function App() {
   const cameraRef = useRef(null);
   const [profile, setProfile] = useState(readProfile);
   const profileRef = useRef(profile);
+  const bonusSpeedRef = useRef(0);
   profileRef.current = profile;
   const [presence, setPresence] = useState({ status: 'connecting', count: 1 });
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
@@ -216,6 +217,8 @@ export default function App() {
       const trainingMultiplier = trainingPad?.multiplier ?? 0;
       const trainingRate = (world.player.userData.moveSpeed || 9) * trainingMultiplier;
       speedGainRemainder += lockedPremiumBoard ? 0 : trainingPad ? trainingRate * delta : movedDistance;
+      speedGainRemainder += bonusSpeedRef.current; // wheelspin / daily reward prizes
+      bonusSpeedRef.current = 0;
       const wheelDistance = keys.s && !keys.w ? -movedDistance : movedDistance;
       world.player.userData.spinWheels?.(trainingPad ? 0 : wheelDistance, delta, trainingMultiplier);
 
@@ -413,6 +416,8 @@ export default function App() {
         levelProgress={profile.levelProgress}
         customSpeed={customSpeed}
         onCustomSpeed={changeCustomSpeed}
+        onGrantSpeed={(amount) => { bonusSpeedRef.current += amount; }}
+        onGrantWins={(amount) => setProfile((current) => ({ ...current, wins: current.wins + amount }))}
       />
     </main>
   );

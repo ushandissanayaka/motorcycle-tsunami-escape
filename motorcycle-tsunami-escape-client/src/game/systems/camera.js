@@ -3,13 +3,13 @@ import { clampToMap } from '../../shared/constants.js';
 
 const OFFSET = new THREE.Vector3(0, 3.2, 7); // behind + above the rider, at zoom 1
 const LOOK_OFFSET = new THREE.Vector3(0, 1.4, 0);
-const LERP = 0.12;
+const LERP = 0.2;
 
 const ZOOM_MIN = 0.4; // close behind the rider
 const ZOOM_MAX = 6; // high above, showing the whole map area
-const SMOOTHING = 0.18;
+const SMOOTHING = 0.3;
 
-const ORBIT_SPEED = 0.006; // radians per pixel dragged
+const ORBIT_SPEED = 0.0035; // radians per pixel dragged
 const KEY_ORBIT_STEP = 0.2; // radians per Q / E press
 const PITCH_MIN = 0.06; // never dip below the ground
 const PITCH_MAX = 1.45; // almost straight down
@@ -146,10 +146,10 @@ export function updateChaseCamera(camera, target) {
   const radius = Math.hypot(height, reach);
   const pitch = THREE.MathUtils.clamp(Math.atan2(height, reach) + data.pitch, PITCH_MIN, PITCH_MAX);
 
-  // Orbit around the rider: yaw swings the camera about the vertical axis, on top of the rider's heading.
+  // Keep yaw in world space: rotating the rider must not swing the camera back behind them.
   const flat = radius * Math.cos(pitch);
   const offset = new THREE.Vector3(flat * Math.sin(data.yaw), radius * Math.sin(pitch), flat * Math.cos(data.yaw));
-  const desired = offset.applyQuaternion(target.quaternion).add(target.position);
+  const desired = offset.add(target.position);
   // Keep the camera out of the canyon wall when the rider is near an edge.
   const inside = clampToMap(desired.x, desired.z, 1.5);
   desired.x = inside.x;

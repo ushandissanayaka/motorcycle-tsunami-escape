@@ -304,8 +304,10 @@ const MAX_OVERTAKE_DELAY = 30; // seconds
 const MAX_WAVES = 5; // waves in the water at once
 const SPAWN_AHEAD = 320; // a wave appears this far ahead of a rider who has gone past the sea's start
 const FULL_HEIGHT_DISTANCE = 480; // a wave has swollen to full size after rolling this far
+const BREAK_DURATION = 1.8; // seconds a wave takes to crash and dissolve once it starts breaking
+const BREAK_CREEP = 0.35; // fraction of run speed a wave still creeps forward while breaking
 
-export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRange = [7, 16], startHeight = 6, endHeight = 30 }) {
+export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRange = [7, 16], startHeight = 4, endHeight = 20 }) {
   const group = new THREE.Group();
 
   // The sea surrounds the whole map: land and canyon walls stand above it, and it is only visible outside the walls
@@ -414,13 +416,17 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
         const t = THREE.MathUtils.clamp(wave.travelled / FULL_HEIGHT_DISTANCE, 0, 1);
         wave.height = (startHeight + (endHeight - startHeight) * t ** 1.4) * wave.sizeScale; // it swells as it closes in
         wave.uniforms.uCurl.value = 1;
-        if (wave.z >= zNear) {
+        // Start breaking early enough that, creeping forward at BREAK_CREEP while it crashes,
+        // the wave finishes dissolving right at zNear (the starting line, where the track's red is deepest)
+        // instead of overshooting into the starting place.
+        const breakTravel = wave.speed * BREAK_CREEP * BREAK_DURATION;
+        if (wave.z >= zNear - breakTravel) {
           wave.phase = 'break';
           wave.breakProgress = 0;
         }
       } else {
-        wave.breakProgress += dt / 1.8;
-        wave.z += wave.speed * 0.35 * dt;
+        wave.breakProgress += dt / BREAK_DURATION;
+        wave.z += wave.speed * BREAK_CREEP * dt;
         const u = Math.min(wave.breakProgress, 1);
         wave.height = endHeight * wave.sizeScale * (1 - u) ** 1.6; // it crashes down and dissolves
         wave.uniforms.uCurl.value = 1 + 2.5 * u;
@@ -437,7 +443,7 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
       wave.tag.material.opacity = wave.phase === 'run' ? near : near * (1 - Math.min(wave.breakProgress * 2, 1));
       // Tags of waves that are close together (about to pass one another) are stacked so they stay readable.
       const stacked = state.waves.filter((other) => other !== wave && Math.abs(other.z - wave.z) < TAG_STACK_RANGE && other.spawnOrder < wave.spawnOrder).length;
-      wave.tag.position.set(0, Math.max(wave.height, startHeight) + 11 + stacked * TAG_STACK_STEP, 0);
+      wave.tag.position.set(0, Math.max(wave.height, startHeight) + 7 + stacked * TAG_STACK_STEP, 0);
     }
   };
 

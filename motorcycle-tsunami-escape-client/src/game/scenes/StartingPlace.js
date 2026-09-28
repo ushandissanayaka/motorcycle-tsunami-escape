@@ -15,6 +15,8 @@ import { createCollision } from '../systems/collision.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
 import { BOOST_PADS, MAP_LAYOUT, WAVE_TRACK, WORLD_GATES } from '../../shared/constants.js';
 import { createWorldGate } from '../entities/WorldGate.js';
+import { createNextEventBoard } from '../entities/NextEventBoard.js';
+import { createWorld2BikeDisplay } from '../entities/World2BikeDisplay.js';
 
 const { room: ROOM, corridor: CORRIDOR } = MAP_LAYOUT;
 const STAGE_FRONT_Z = 20.5;
@@ -43,6 +45,10 @@ const GROUP_CHEST_AREA = { divine: { x: -19.2, z: 24.6 }, chest: { x: -27.8, z: 
 // The store stands a little way back from the grey strip beside the black road; a short path joins its ramp to the strip.
 // World 2's gate stands on the grass north of the bike store, angled so its front faces toward the black road.
 const WORLD_GATE_POSITION = { x: -24, z: -29, yaw: 0.85 }; // yaw turns its front from south toward the road (east)
+// The "Next Event!" billboard stands on the ground just west of the mono (black-and-white) 100x board,
+// near the Aetherune Bike display, with the canyon wall as a backdrop, as in the reference screenshots.
+// Pulled back a little further behind its own facing (toward the wall) than a first pass at this spot.
+const NEXT_EVENT_POSITION = { x: 26, y: 0, z: -26, yaw: -0.8 };
 const STORE_SETBACK = 5;
 const STORE_POSITION = new THREE.Vector3(PLAZA_WEST.x0 - 17 - STORE_SETBACK, 0, 0); // 4 units south of where it was, toward the Group Chest
 const STORE_RAMP_FOOT_X = STORE_POSITION.x + 17;
@@ -94,6 +100,7 @@ export function buildStartingPlace(scene) {
       style: pad.style,
       length: pad.length,
       width: pad.width,
+      height: pad.height,
       position: new THREE.Vector3(BOARD_X, 0, z),
     })
   );
@@ -111,6 +118,9 @@ export function buildStartingPlace(scene) {
   gate.group.position.set(WORLD_GATE_POSITION.x, 0, WORLD_GATE_POSITION.z);
   gate.group.rotation.y = WORLD_GATE_POSITION.yaw;
   scene.add(gate.group);
+  const world2Bike = createWorld2BikeDisplay();
+  world2Bike.group.position.set(-8.5, 0, -32.3);
+  scene.add(world2Bike.group);
   // The wave place fills the corridor to the north.
   const waveTrack = createWaveTrack({ x0: -CORRIDOR.halfWidth, x1: CORRIDOR.halfWidth, zStart: ROOM.north, ...WAVE_TRACK });
   scene.add(waveTrack.group);
@@ -127,6 +137,7 @@ export function buildStartingPlace(scene) {
   const tsunami = createTsunami({
     width: CORRIDOR.halfWidth * 2 + 10,
     zFar: CORRIDOR.north - 300,
+    // Waves finish dissolving right at the starting line (where the track's red is deepest), never reaching the starting place.
     zNear: ROOM.north + 2,
     seaLevel: -WAVE_TRACK.pitDepth - 0.8,
   });
@@ -134,19 +145,26 @@ export function buildStartingPlace(scene) {
 
   scene.add(leaderboards.group);
 
-  // "BIKE STORE" sign floating above the store's roof.
+  // "BIKE STORE" sign floating above the store's roof (the store's upper floor and roof were both
+  // raised by 2 units for more headroom around its bikes, so the sign is raised to match, keeping the
+  // same clearance above the roof it always had).
   const storeSign = createTitledSign({ title: 'BIKE STORE', subtitle: 'Unlock faster bikes with wins!', titleSize: 2.3, titleWidth: 19, subtitleSize: 1.2, subtitleWidth: 29, scale: 1.7 });
-  storeSign.position.set(STORE_POSITION.x + 2, 8.6, STORE_POSITION.z);
+  storeSign.position.set(STORE_POSITION.x + 2, 10.6, STORE_POSITION.z);
   scene.add(storeSign);
 
   // "TRAINING" sign floating over the pad, as in the reference.
-  const trainingSign = createTitledSign({ title: 'TRAINING', subtitle: 'Increase your speed automatically!', titleSize: 2.3, titleWidth: 17, subtitleSize: 1.2, subtitleWidth: 29, scale: 1 });
-  trainingSign.position.set(BOARD_X, 0.6, TRAINING_CENTER_Z);
+  const trainingSign = createTitledSign({ title: 'TRAINING', subtitle: 'Increase your speed automatically!', titleSize: 2.3, titleWidth: 17, subtitleSize: 1.2, subtitleWidth: 29, subtitleColor: ['#ffb20a', '#ffe12b'], scale: 1 });
+  trainingSign.position.set(BOARD_X, 2, TRAINING_CENTER_Z);
   scene.add(trainingSign);
 
   const display = createBikeDisplay({ bikeId: 'bike_aetherune', name: 'Aetherune Bike', price: '699' });
   display.group.position.set(11.8, 0, -22.1); // on the east strip, north end, as in the reference
   scene.add(display.group);
+
+  const nextEvent = createNextEventBoard();
+  nextEvent.group.position.set(NEXT_EVENT_POSITION.x, NEXT_EVENT_POSITION.y, NEXT_EVENT_POSITION.z);
+  nextEvent.group.rotation.y = NEXT_EVENT_POSITION.yaw;
+  scene.add(nextEvent.group);
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
   const update = (time, onStorePad, camera) => {
@@ -162,6 +180,7 @@ export function buildStartingPlace(scene) {
     leaderboards.update();
     chestArea.update(time, camera);
     gate.update(time);
+    world2Bike.update(time);
     waveTrack.update(time);
     tsunami.update(time, player.position.z);
     sky.userData.update(time);
@@ -198,7 +217,7 @@ function addLighting(scene) {
     light.position.set(x, y, z);
     scene.add(light);
   };
-  glow(0x45d2ff, 12, STORE_POSITION.x + 2, 7, STORE_POSITION.z); // store: cool cyan
+  glow(0x45d2ff, 12, STORE_POSITION.x + 2, 9, STORE_POSITION.z); // store: cool cyan (raised 2 with the taller store)
   glow(0xff5cf0, 30, -2, 6, 24, 30); // Lucky Blocks stage: magenta...
   glow(0x62c7ff, 30, 6, 6, 26, 30); // ...and sky blue
   glow(0xffc93a, 35, BOARD_X, 6, TRAINING_CENTER_Z); // training place: warm gold
@@ -257,9 +276,11 @@ function addGround(scene, { grass, plaza, floor }) {
   scene.add(slab(PLAZA_WEST, plaza, 0.06, 0.12, PLAZA_TILE));
   scene.add(slab(PLAZA_EAST, plaza, 0.06, 0.12, PLAZA_TILE));
 
-  // Floor under the bike store, and the path from its ramp to the road plaza.
+  // Floor under the bike store, and the path from its ramp to the road plaza. The store was widened
+  // (outer width 36 -> 44), so its floor patch is widened to match, keeping the same inset from the
+  // store's outer walls it always had.
   scene.add(slab({ x0: STORE_RAMP_FOOT_X, x1: PLAZA_WEST.x0, z0: STORE_POSITION.z - 3.5, z1: STORE_POSITION.z + 3.5 }, plaza, 0.06, 0.12, PLAZA_TILE));
-  scene.add(slab({ x0: STORE_POSITION.x - 7.5, x1: STORE_POSITION.x + 7, z0: STORE_POSITION.z - 16.5, z1: STORE_POSITION.z + 16.5 }, floor, 0.06, 0.12));
+  scene.add(slab({ x0: STORE_POSITION.x - 7.5, x1: STORE_POSITION.x + 7, z0: STORE_POSITION.z - 20.5, z1: STORE_POSITION.z + 20.5 }, floor, 0.06, 0.12));
 
   // Studded canyon wall following the T-shaped outline.
   scene.add(createCanyonWall());

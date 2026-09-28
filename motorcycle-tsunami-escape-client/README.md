@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Start the backend in a second terminal with `cd ../motorcycle-tsunami-escape-server` and `npm install && npm run dev`. The client connects to `ws://localhost:2567` by default; set `VITE_SERVER_WS_URL` in the client `.env` to change it.
+Start the backend in a second terminal with `cd ../motorcycle-tsunami-escape-server` and `npm install && npm run dev`. The client connects to port 2567 on the same host by default. Vite listens on all network interfaces, so other devices on the same network can open the game using this computer's LAN address. For a deployed game, set `VITE_SERVER_WS_URL` in the client `.env` to the publicly reachable Colyseus `ws://` or `wss://` address, then rebuild the client.
 
 Use **W/A/S/D** to ride, **Space** to hop, and the bike cards to select bikes you have unlocked. Every wave-track pit has a narrow, long red mat on the left and yellow mat on the right, each with one large hovering trophy and a win label. Ride over one to collect its wins, see a celebration, and return to the hub. The first pit awards +2 on red and +3 on yellow; each later pit adds two wins to both colors. Collected rewards and wins are saved in this browser.
 

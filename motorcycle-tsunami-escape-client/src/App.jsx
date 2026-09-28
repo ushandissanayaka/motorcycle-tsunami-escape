@@ -98,6 +98,7 @@ export default function App() {
     const remoteRiders = new Map();
     let room = null;
     let cancelled = false;
+    let reconnectTimer = null;
     let lastPresenceSend = 0;
     let speedGainRemainder = 0;
     let speedProgress = profileRef.current.speed;
@@ -106,41 +107,62 @@ export default function App() {
     let lastTrainingPad = null;
     let respawnFreezeUntil = 0;
 
-    joinStartingPlace({
-      onStatus: (status) => { if (!cancelled) setPresence((current) => ({ ...current, status })); },
-      onPlayers: (players, localSessionId) => {
-        if (cancelled) return;
-        const present = new Set();
-        for (const remote of players) {
-          if (remote.sessionId === localSessionId) continue;
-          present.add(remote.sessionId);
-          let rider = remoteRiders.get(remote.sessionId);
-          const bike = BIKES.find((item) => item.id === remote.equippedBike);
-          if (!rider) {
-            rider = createPlayer();
-            scene.add(rider);
-            remoteRiders.set(remote.sessionId, rider);
+    const scheduleReconnect = () => {
+      if (cancelled || reconnectTimer) return;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectToRoom();
+      }, 2500);
+    };
+    const connectToRoom = () => {
+      joinStartingPlace({
+        onStatus: (status) => {
+          if (cancelled) return;
+          setPresence((current) => ({ ...current, status }));
+          if (status === 'offline') scheduleReconnect();
+          if (status === 'connected' && reconnectTimer) {
+            window.clearTimeout(reconnectTimer);
+            reconnectTimer = null;
           }
-          rider.userData.setBikeModel?.(remote.equippedBike);
-          rider.userData.setBikeColor?.(rideColor(bike));
-          rider.position.set(remote.x, remote.y, remote.z);
-          rider.rotation.y = remote.rotY;
-        }
-        for (const [sessionId, rider] of remoteRiders) {
-          if (!present.has(sessionId)) {
-            scene.remove(rider);
-            remoteRiders.delete(sessionId);
+        },
+        onPlayers: (players, localSessionId) => {
+          if (cancelled) return;
+          const present = new Set();
+          for (const remote of players) {
+            if (remote.sessionId === localSessionId) continue;
+            present.add(remote.sessionId);
+            let rider = remoteRiders.get(remote.sessionId);
+            const bike = BIKES.find((item) => item.id === remote.equippedBike);
+            if (!rider) {
+              rider = createPlayer();
+              scene.add(rider);
+              remoteRiders.set(remote.sessionId, rider);
+            }
+            rider.userData.setBikeModel?.(remote.equippedBike);
+            rider.userData.setBikeColor?.(rideColor(bike));
+            rider.position.set(remote.x, remote.y, remote.z);
+            rider.rotation.y = remote.rotY;
           }
+          for (const [sessionId, rider] of remoteRiders) {
+            if (!present.has(sessionId)) {
+              scene.remove(rider);
+              remoteRiders.delete(sessionId);
+            }
+          }
+          setPresence((current) => current.count === players.length ? current : ({ ...current, count: players.length }));
+        },
+      }).then((connection) => {
+        if (cancelled) connection.leave();
+        else room = connection;
+      }).catch((error) => {
+        console.info('Starting Place server is not available:', error.message);
+        if (!cancelled) {
+          setPresence((current) => ({ ...current, status: 'offline' }));
+          scheduleReconnect();
         }
-        setPresence((current) => current.count === players.length ? current : ({ ...current, count: players.length }));
-      },
-    }).then((connection) => {
-      if (cancelled) connection.leave();
-      else room = connection;
-    }).catch((error) => {
-      console.info('Starting Place server is not available:', error.message);
-      if (!cancelled) setPresence((current) => ({ ...current, status: 'offline' }));
-    });
+      });
+    };
+    connectToRoom();
 
     let previous = performance.now();
     let active = true;
@@ -248,6 +270,7 @@ export default function App() {
     return () => {
       active = false;
       cancelled = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
       room?.leave();
       keys.dispose();
       detachCameraControls();

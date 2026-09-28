@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
+import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture, mulberry32 } from '../util/textures.js';
 
 /**
  * The wave place: a long run of black asphalt slabs, level with the road,
@@ -8,13 +8,12 @@ import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../ut
  * bigger gaps; a pit is a real drop (`WAVE_TRACK.pitDepth`) but a safe one: a bike
  * that misses lands unharmed on the floor and gets out by jumping at the wall. Slabs carry a yellow dashed
  * centre line, pits have a red trophy mat along the west wall and a yellow one along the east wall
- * (down on their floor, running lengthwise), and pink-lavender curbs edge both sides. Yellow
- * panels are set into the east wall. The far end is open to the sky.
+ * (down on their floor, running lengthwise, against lavender pit walls), and pink-lavender curbs edge
+ * both sides. Yellow "VIP" boards stand on random side walls. The far end is open to the sky.
  * Only the entrance edge glows red; `setWarning(true)` floods the whole track red, as when a wave is coming.
  */
 
 const CURB = { base: '#d8c0e2', light: '#eddcf5', dark: '#a98fbc' };
-const PANEL = { base: '#f2b632', light: '#ffd056', dark: '#c98f1c' };
 const PAD_RED = 0xff3038;
 const PAD_YELLOW = 0xffe62e;
 const CURB_WIDTH = 2;
@@ -28,61 +27,146 @@ const RED_FADE_LENGTH = 6; // red glow at the entrance edge, gone this far along
 const PAD_WIDTH = 4.6;
 const PAD_LENGTH_FRACTION = 0.7;
 const PAD_WALL_INSET = 0.6; // gap between a mat and its side wall
-const BASE_PAD_WIDTH = 6.25; // trophy / label size reference
-const BASE_PAD_DEPTH = 2.2;
+const PIT_WALL_THICKNESS = 0.3; // lavender lining over the canyon rock, down in the pits
 const DASH_WIDTH = 0.5;
 const DASH_LENGTH = 4;
 const DASH_SPACING = 8;
-const TROPHY_SCALE = 1.3; // trophy size at the base mat size (it was 0.88)
 const SURFACE = 0.1; // height of the road surface, which the slab tops are flush with
-const TROPHY_GOLD = new THREE.MeshStandardMaterial({ color: 0xffd62e, metalness: 0.72, roughness: 0.24, emissive: 0x8a5a00, emissiveIntensity: 0.28 });
-const TROPHY_DARK = new THREE.MeshStandardMaterial({ color: 0x9a5b08, metalness: 0.55, roughness: 0.3 });
-const TROPHY_BOWL = new THREE.LatheGeometry([
-  new THREE.Vector2(0, 0), new THREE.Vector2(0.2, 0), new THREE.Vector2(0.23, 0.08),
-  new THREE.Vector2(0.14, 0.18), new THREE.Vector2(0.31, 0.34), new THREE.Vector2(0.35, 0.52),
-  new THREE.Vector2(0.28, 0.62), new THREE.Vector2(0.1, 0.64), new THREE.Vector2(0, 0.64),
-], 20);
+// Red mats pay double but only open at this level; yellow mats can be returned from level 1.
+export const RED_REWARD_LEVEL = 100;
+// Yellow wins per pit: 1, 3, 8, 20 (as in the reference), then on at the same x2.5 pace. Red is double.
+const yellowWins = (pit) => {
+  let wins = 1;
+  for (let i = 0; i < pit; i += 1) wins = Math.ceil(wins * 2.5);
+  return wins;
+};
+const REWARD_LABEL_SIZE = { width: 5.2, height: 2.6, y: 1.9, inset: 0.7 }; // world units, over the mat (inset: toward the track centre, clear of the wall)
+const RETURN_LABEL_SIZE = { width: 4.8, height: 1.2, y: 3.4 };
+const VIP_PANEL = { width: 7, height: 5, chance: 0.45 }; // a VIP board on this share of slabs, on a random side
+const LABEL_FONT = '"Lilita One", "Fredoka", "Arial Black", Arial, sans-serif';
 
-function createTrophy(scale) {
-  const trophy = new THREE.Group();
-  const bowl = new THREE.Mesh(TROPHY_BOWL, TROPHY_GOLD);
-  bowl.position.y = 0.55;
-  trophy.add(bowl);
-  const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, 0.26, 12), TROPHY_GOLD);
-  stem.position.y = 0.43;
-  trophy.add(stem);
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.1, 16), TROPHY_DARK);
-  base.position.y = 0.1;
-  trophy.add(base);
-  for (const side of [-1, 1]) {
-    const handle = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.045, 8, 16), TROPHY_GOLD);
-    handle.position.set(side * 0.28, 1.0, 0);
-    trophy.add(handle);
-  }
-  trophy.scale.setScalar(scale);
-  return trophy;
+/** A canvas texture drawn by `draw`, redrawn once the web fonts finish loading. */
+function canvasTexture(width, height, draw) {
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  draw(ctx);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  document.fonts?.ready.then(() => {
+    ctx.clearRect(0, 0, width, height);
+    draw(ctx);
+    texture.needsUpdate = true;
+  });
+  return texture;
 }
 
-function createRewardLabel(wins, scale = 1) {
-  const canvas = document.createElement('canvas');
-  canvas.width = 512;
-  canvas.height = 128;
-  const ctx = canvas.getContext('2d');
-  ctx.font = '900 78px Arial';
+/** Flat gold cup with a navy outline, as on the reference's reward boards. */
+function drawTrophy(ctx, cx, top, h) {
+  const u = h / 100;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#1f2a6b';
+  ctx.lineWidth = 7 * u;
+  const gold = ctx.createLinearGradient(0, top, 0, top + h);
+  gold.addColorStop(0, '#ffe45c');
+  gold.addColorStop(1, '#f5a000');
+  ctx.fillStyle = gold;
+  const shape = (path) => { ctx.beginPath(); path(); ctx.fill(); ctx.stroke(); };
+  for (const side of [-1, 1]) {
+    // Handles: loops out from the sides of the bowl.
+    ctx.beginPath();
+    ctx.ellipse(cx + side * 34 * u, top + 32 * u, 14 * u, 16 * u, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  shape(() => { // bowl
+    ctx.moveTo(cx - 36 * u, top + 12 * u);
+    ctx.lineTo(cx + 36 * u, top + 12 * u);
+    ctx.quadraticCurveTo(cx + 34 * u, top + 58 * u, cx + 8 * u, top + 66 * u);
+    ctx.lineTo(cx - 8 * u, top + 66 * u);
+    ctx.quadraticCurveTo(cx - 34 * u, top + 58 * u, cx - 36 * u, top + 12 * u);
+  });
+  shape(() => ctx.rect(cx - 7 * u, top + 64 * u, 14 * u, 16 * u)); // stem
+  shape(() => ctx.rect(cx - 26 * u, top + 80 * u, 52 * u, 16 * u)); // base
+  ctx.fillStyle = '#e8661a'; // the cup's open mouth
+  shape(() => ctx.ellipse(cx, top + 12 * u, 36 * u, 9 * u, 0, 0, Math.PI * 2));
+  ctx.restore();
+}
+
+/** Outlined label text: `fill` over a dark stroke. */
+function drawOutlinedText(ctx, text, x, y, size, fill, maxWidth) {
+  ctx.font = `${size}px ${LABEL_FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
-  ctx.lineWidth = 14;
-  ctx.strokeStyle = '#251323';
-  ctx.strokeText(`+${wins} ${wins === 1 ? 'Win' : 'Wins'}`, 256, 66, 470);
-  ctx.fillStyle = '#fff12b';
-  ctx.fillText(`+${wins} ${wins === 1 ? 'Win' : 'Wins'}`, 256, 66, 470);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
+  ctx.lineWidth = size * 0.17;
+  ctx.strokeStyle = '#1c1408';
+  ctx.strokeText(text, x, y, maxWidth);
+  ctx.fillStyle = fill;
+  ctx.fillText(text, x, y, maxWidth);
+}
+
+/** "+N Wins" over a flat gold trophy on a soft yellow glow band. */
+function createRewardLabel(wins) {
+  const texture = canvasTexture(512, 256, (ctx) => {
+    ctx.save();
+    ctx.filter = 'blur(10px)';
+    const band = ctx.createLinearGradient(0, 0, 512, 0);
+    band.addColorStop(0, 'rgba(255, 214, 40, 0)');
+    band.addColorStop(0.2, 'rgba(255, 214, 40, 0.55)');
+    band.addColorStop(0.8, 'rgba(255, 214, 40, 0.55)');
+    band.addColorStop(1, 'rgba(255, 214, 40, 0)');
+    ctx.fillStyle = band;
+    ctx.fillRect(20, 78, 472, 116);
+    ctx.restore();
+    drawTrophy(ctx, 256, 22, 212);
+    const text = ctx.createLinearGradient(0, 96, 0, 176);
+    text.addColorStop(0, '#fff46a');
+    text.addColorStop(1, '#ffbf1c');
+    drawOutlinedText(ctx, `+${wins} ${wins === 1 ? 'Win' : 'Wins'}`, 256, 136, 96, text, 480);
+  });
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
-  sprite.scale.set(2.75 * scale * 1.3, 0.69 * scale * 1.3, 1);
-  sprite.position.y = 0.53 + 2.01 * scale; // just above the top of the trophy, which is scaled the same way
+  sprite.scale.set(REWARD_LABEL_SIZE.width, REWARD_LABEL_SIZE.height, 1);
+  sprite.position.y = REWARD_LABEL_SIZE.y;
   return sprite;
+}
+
+let returnTexture = null;
+/** White "Return" tag shown over the rewards the rider can collect. */
+function createReturnLabel() {
+  returnTexture ??= canvasTexture(512, 128, (ctx) => drawOutlinedText(ctx, 'Return', 256, 66, 92, '#ffffff', 480));
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: returnTexture, transparent: true, depthWrite: false }));
+  sprite.scale.set(RETURN_LABEL_SIZE.width, RETURN_LABEL_SIZE.height, 1);
+  sprite.position.y = RETURN_LABEL_SIZE.y;
+  return sprite;
+}
+
+let vipTexture = null;
+/** Yellow board with an orange italic "VIP", as on the reference's canyon walls. */
+function vipBoardTexture() {
+  vipTexture ??= canvasTexture(512, 366, (ctx) => {
+    ctx.fillStyle = '#e3ca3c';
+    ctx.fillRect(0, 0, 512, 366);
+    ctx.font = 'italic 900 190px "Montserrat", "Arial Black", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.shadowColor = 'rgba(150, 70, 0, 0.45)';
+    ctx.shadowOffsetX = 4;
+    ctx.shadowOffsetY = 6;
+    ctx.shadowBlur = 4;
+    const orange = ctx.createLinearGradient(0, 100, 0, 270);
+    orange.addColorStop(0, '#ffd23a');
+    orange.addColorStop(1, '#ff7f0a');
+    ctx.fillStyle = orange;
+    ctx.fillText('VIP', 256, 190);
+    ctx.shadowColor = 'transparent';
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#c55a05';
+    ctx.strokeText('VIP', 256, 190);
+  });
+  return vipTexture;
 }
 
 /**
@@ -128,6 +212,11 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
   const pits = [];
   const surfaces = [];
   const rewards = [];
+  let riderLevel = 1;
+  const vipRandom = mulberry32(8123);
+  const vipMaterial = new THREE.MeshStandardMaterial({ map: vipBoardTexture(), roughness: 0.7, emissive: 0xffffff, emissiveMap: vipBoardTexture(), emissiveIntensity: 0.25 });
+  const vipBack = new THREE.MeshStandardMaterial({ color: 0xc9b02e, roughness: 0.8 });
+  const padBase = new THREE.MeshStandardMaterial({ color: 0x3a3a46, roughness: 0.8 });
   // Slab tops sit flush with the main road (whose surface is at SURFACE, riders stand at 0).
   const slabTop = SURFACE;
   const floorTop = SURFACE - pitDepth;
@@ -200,6 +289,18 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
       dash.position.set(centerX, slabTop + 0.075, dz);
       group.add(dash);
     }
+    if (vipRandom() < VIP_PANEL.chance) {
+      // A VIP board flat on the canyon wall beside this slab, facing the track.
+      const side = vipRandom() < 0.5 ? -1 : 1;
+      const faceX = centerX + side * (width / 2 - 0.15);
+      const boardZ = midZ + (vipRandom() - 0.5) * Math.max(0, length - VIP_PANEL.width - 2);
+      const boardY = slabTop + 0.4 + VIP_PANEL.height / 2;
+      const board = new THREE.Mesh(new THREE.PlaneGeometry(VIP_PANEL.width, VIP_PANEL.height), vipMaterial);
+      board.rotation.y = -side * Math.PI / 2;
+      board.position.set(faceX - side * 0.26, boardY, boardZ);
+      group.add(board);
+      box(0.25, VIP_PANEL.height, VIP_PANEL.width, vipBack, faceX - side * 0.125, boardY, boardZ);
+    }
     z = zBack;
 
     // The pit after each slab: the next segment can be generated before the rider reaches it.
@@ -210,58 +311,63 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
       box(width, 0.1, gap, hollowFloor, centerX, floorTop - 0.05, gapMid, 4.8);
       sideWalls(z, z - gap, wallFoot, wallTops);
       for (const side of [-1, 1]) {
-        // Side wall of the pit (the ground plane is cut away over the track, so nothing else closes it in).
-        box(1, columnHeight - 0.02, gap, asphalt, centerX + side * (width / 2 + 0.5), columnY - 0.01, gapMid);
+        // Lavender pit wall, just in front of the canyon rock (which starts 0.15 inside the track edge).
+        box(PIT_WALL_THICKNESS, columnHeight - 0.02, gap, curb, centerX + side * (width / 2 - 0.15 - PIT_WALL_THICKNESS / 2), columnY - 0.01, gapMid, 4.5);
         box(CURB_WIDTH, 0.07, gap, curb, centerX + side * (width / 2 - CURB_WIDTH / 2), floorTop + 0.035, gapMid);
       }
       // Mats run lengthwise against the side walls and lengthen with the pit.
       const padDepth = gap * PAD_LENGTH_FRACTION;
       const padWidth = PAD_WIDTH;
-      const rewardScale = Math.min(padWidth / BASE_PAD_WIDTH, padDepth / BASE_PAD_DEPTH); // trophy and label grow with the mat
+      const yellow = yellowWins(i);
       for (const [xSide, materialColor, wins, sideName] of [
-        [-1, PAD_RED, (i + 1) * 2, 'red'],
-        [1, PAD_YELLOW, (i + 1) * 2 + 1, 'yellow'],
+        [-1, PAD_RED, yellow * 2, 'red'],
+        [1, PAD_YELLOW, yellow, 'yellow'],
       ]) {
         const padX = centerX + xSide * (width / 2 - PAD_WALL_INSET - padWidth / 2);
         const padZ = gapMid;
         const pickup = new THREE.Group();
         pickup.position.set(padX, floorTop + 0.08, padZ);
+        // Glowing mat on a slightly larger dark base plate.
+        const base = new THREE.Mesh(new THREE.BoxGeometry(padWidth + 0.4, 0.08, padDepth + 0.4), padBase);
+        base.position.y = -0.04;
+        pickup.add(base);
         const pad = new THREE.Mesh(
           new THREE.BoxGeometry(padWidth, 0.16, padDepth),
           new THREE.MeshStandardMaterial({ color: materialColor, emissive: materialColor, emissiveIntensity: 0.9, roughness: 0.4 })
         );
+        pad.position.y = 0.06;
         pickup.add(pad);
         surfaces.push({
           minX: padX - padWidth / 2,
           maxX: padX + padWidth / 2,
           minZ: padZ - padDepth / 2,
           maxZ: padZ + padDepth / 2,
-          top: floorTop + 0.16,
+          top: floorTop + 0.22,
         });
 
-        // Display the trophy count that matches this pad's win value.
-      const trophies = [];
-      const rewardArt = new THREE.Group();
-      const trophy = createTrophy(TROPHY_SCALE * rewardScale);
-      trophy.position.set(0, 0.38, 0);
-      rewardArt.add(trophy);
-      trophies.push(trophy);
-        rewardArt.add(createRewardLabel(wins, rewardScale));
+        const rewardArt = new THREE.Group();
+        rewardArt.position.x = -xSide * REWARD_LABEL_SIZE.inset;
+        rewardArt.add(createRewardLabel(wins));
+        const returnLabel = createReturnLabel();
+        rewardArt.add(returnLabel);
         pickup.add(rewardArt);
         group.add(pickup);
-        rewards.push({
-        id: `wave-reward-v4-${i + 1}-${sideName}`,
+        const reward = {
+          id: `wave-reward-v5-${i + 1}-${sideName}`,
           wins,
           x: padX,
           z: padZ,
-          floor: floorTop + 0.16,
+          floor: floorTop + 0.22,
           halfX: padWidth / 2,
           halfZ: padDepth / 2,
           group: pickup,
           rewardArt,
-          trophies,
+          returnLabel,
+          requiredLevel: sideName === 'red' ? RED_REWARD_LEVEL : 1,
           claimed: false,
-        });
+        };
+        returnLabel.visible = riderLevel >= reward.requiredLevel;
+        rewards.push(reward);
       }
       z -= gap;
     }
@@ -275,13 +381,6 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     while (z > playerZ - lookAhead) generateNextSegment();
   };
 
-  // Yellow panels set into the east wall, spread along the run.
-  const length = zStart - z;
-  const panelMaterial = new THREE.MeshStandardMaterial({ map: makeStudTexture(PANEL, 64), roughness: 0.8, emissive: 0xf2b632, emissiveIntensity: 0.25 });
-  for (const [fraction, depth, height] of [[0.25, 9, 7], [0.5, 11, 8], [0.8, 12, 8]]) {
-    box(0.3, height, depth, panelMaterial, x1 - 0.15, slabTop + 0.5 + height / 2, zStart - fraction * length);
-  }
-
   // A warning stretches the red across the whole run instead of just the entrance.
   const setWarning = (active) => {
     redUniforms.uRedLength.value = active ? (zStart - z) * 2 : RED_FADE_LENGTH;
@@ -289,6 +388,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
 
   const rewardAt = (position) => rewards.find((reward) => (
     !reward.claimed
+    && riderLevel >= reward.requiredLevel
     && Math.abs(position.x - reward.x) <= reward.halfX
     && Math.abs(position.z - reward.z) <= reward.halfZ
     && position.y >= reward.floor - 0.3
@@ -311,19 +411,15 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     }
   };
 
-  const update = (time) => {
-    for (const reward of rewards) {
-      if (reward.claimed) continue;
-      reward.trophies.forEach((trophy, index) => {
-        trophy.rotation.y = time * 1.5 + index * 0.4;
-        trophy.position.y = 0.38 + Math.sin(time * 2.5 + index) * 0.055;
-      });
-    }
+  /** Shows "Return" on the rewards this level can collect (red ones open at RED_REWARD_LEVEL). */
+  const setRiderLevel = (level) => {
+    riderLevel = level;
+    for (const reward of rewards) reward.returnLabel.visible = riderLevel >= reward.requiredLevel;
   };
 
   return {
-    group, solids, pits, surfaces, rewards, rewardAt, collectReward, setCollectedRewards,
-    setWarning, update, ensureAhead,
+    group, solids, pits, surfaces, rewards, rewardAt, collectReward, setCollectedRewards, setRiderLevel,
+    setWarning, ensureAhead,
     get zEnd() { return z; },
   };
 }

@@ -183,7 +183,6 @@ export function buildStartingPlace(scene) {
     chestArea.update(time, camera);
     gate.update(time);
     world2Bike.update(time);
-    waveTrack.update(time);
     tsunami.update(time, player.position.z);
     sky.userData.update(time);
     lights.followRider(player.position);

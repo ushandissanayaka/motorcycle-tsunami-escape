@@ -91,6 +91,7 @@ export default function App() {
 
     const world = buildStartingPlace(scene);
     world.waveTrack.setCollectedRewards(profileRef.current.collectedRewards);
+    world.waveTrack.setRiderLevel(profileRef.current.level);
     bikeRef.current = world.player;
     const detachLeaderboards = world.leaderboards.attach(camera, renderer.domElement);
     worldRef.current = world;
@@ -351,6 +352,11 @@ export default function App() {
       return isBikeUnlocked(bike, profile) ? 'unlocked' : 'locked';
     });
   }, [profile]);
+
+  // Red wave-track trophies open at level 100; the track shows "Return" on the ones this level can collect.
+  useEffect(() => {
+    worldRef.current?.waveTrack.setRiderLevel(profile.level);
+  }, [profile.level]);
 
   const changeCustomSpeed = (value) => {
     setCustomSpeed(value);

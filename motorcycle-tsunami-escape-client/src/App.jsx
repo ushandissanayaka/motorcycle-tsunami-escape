@@ -180,6 +180,7 @@ export default function App() {
       } else {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
+        camera.userData.steer = 0;
         keys.w = false;
         keys.a = false;
         keys.s = false;

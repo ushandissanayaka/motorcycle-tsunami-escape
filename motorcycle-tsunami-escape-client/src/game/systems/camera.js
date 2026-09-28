@@ -16,8 +16,9 @@ const PITCH_MAX = 1.45; // almost straight down
 
 export function createChaseCamera(aspect) {
   const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 2000);
-  // zoom / yaw / pitch ease toward their targets; yaw and pitch are offsets from the default chase view.
-  camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0 };
+  // zoom / yaw / pitch ease toward their targets. yaw is a free-look offset from straight behind the rider
+  // (Q / E); `steer` collects right-drag turning, which movement.js applies to the rider's heading.
+  camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0, steer: 0 };
   return camera;
 }
 
@@ -26,17 +27,18 @@ const clampZoom = (value) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 /**
  * Camera controls, all removed by the returned function:
  * - zoom: mouse wheel, touchpad two-finger scroll / pinch, touchscreen pinch, + / - keys
- * - rotate: hold the right mouse button (or touchpad right click) and drag, one-finger drag on a
- *   touchscreen, Q / E keys; R resets the view
+ * - steer + rotate: hold the right mouse button (or touchpad right click) and drag, or one-finger drag on a
+ *   touchscreen. Sideways turns the rider and the camera together while driving, so W / S go where you
+ *   look, and orbits the view around the rider while standing still; up / down tilts the view.
+ * - look around the rider: Q / E; R resets the view
  */
 export function attachCameraControls(camera) {
   const data = camera.userData;
   const zoomBy = (factor) => {
     data.zoomTarget = clampZoom(data.zoomTarget * factor);
   };
-  const orbitBy = (yaw, pitch) => {
-    data.yawTarget += yaw;
-    data.yaw += yaw; // follow the pointer immediately while dragging
+  const dragBy = (turn, pitch) => {
+    data.steer += turn;
     data.pitchTarget = THREE.MathUtils.clamp(data.pitchTarget + pitch, -1.5, 1.5);
     data.pitch = data.pitchTarget;
   };
@@ -80,8 +82,8 @@ export function attachCameraControls(camera) {
   };
   const onPointerMove = (event) => {
     if (!drag || event.pointerId !== drag.id) return;
-    // Dragging right swings the view to the right (the camera moves around to the left).
-    orbitBy(-(event.clientX - drag.x) * ORBIT_SPEED, (event.clientY - drag.y) * ORBIT_SPEED);
+    // Dragging right turns the rider (and the view behind them) to the right.
+    dragBy(-(event.clientX - drag.x) * ORBIT_SPEED, (event.clientY - drag.y) * ORBIT_SPEED);
     drag.x = event.clientX;
     drag.y = event.clientY;
   };
@@ -146,9 +148,10 @@ export function updateChaseCamera(camera, target) {
   const radius = Math.hypot(height, reach);
   const pitch = THREE.MathUtils.clamp(Math.atan2(height, reach) + data.pitch, PITCH_MIN, PITCH_MAX);
 
-  // Keep yaw in world space: rotating the rider must not swing the camera back behind them.
+  // Chase view: stay behind the rider's heading (plus any Q / E look-around offset), so turning swings the view too.
+  const yaw = target.rotation.y + data.yaw;
   const flat = radius * Math.cos(pitch);
-  const offset = new THREE.Vector3(flat * Math.sin(data.yaw), radius * Math.sin(pitch), flat * Math.cos(data.yaw));
+  const offset = new THREE.Vector3(flat * Math.sin(yaw), radius * Math.sin(pitch), flat * Math.cos(yaw));
   const desired = offset.add(target.position);
   // Keep the camera out of the canyon wall when the rider is near an edge.
   const inside = clampToMap(desired.x, desired.z, 1.5);

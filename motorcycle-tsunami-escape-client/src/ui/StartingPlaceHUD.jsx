@@ -70,7 +70,7 @@ function StaticArt({ src, box }) {
 }
 
 export default function StartingPlaceHUD({
-  bikes, wins, finishes, notice, celebration, onWavesChange, selectedBike, onSelectBike,
+  bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
   speed, level, levelProgress, customSpeed, onCustomSpeed,
 }) {
   const [showGarage, setShowGarage] = useState(false);
@@ -188,18 +188,6 @@ export default function StartingPlaceHUD({
       <Art src={pack10mArt} box={BOX.pack10m} label="+10M speed" onClick={soon('The +10M speed pack is coming soon.')} />
 
       {toast && <div className="game-toast" role="status">{toast}</div>}
-      {celebration && (
-        <div className="win-celebration" role="status" aria-live="polite">
-          <div className="celebration-confetti" aria-hidden="true">🏆 ✨ 🏆 ✨ 🏆</div>
-          <section className="celebration-card">
-            <span className="celebration-trophy" aria-hidden="true">🏆</span>
-            <small>TROPHY COLLECTED</small>
-            <strong>+{celebration.rewardWins} {celebration.rewardWins === 1 ? 'WIN' : 'WINS'}!</strong>
-            <span className="celebration-total">TOTAL WINS: {celebration.totalWins.toLocaleString()}</span>
-            <b>RETURNING TO START</b>
-          </section>
-        </div>
-      )}
     </div>
   );
 }

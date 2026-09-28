@@ -18,7 +18,7 @@ import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
 const SAVE_KEY = 'mte-starting-place';
 const SESSION_PROGRESS_KEY = 'mte-session-progress';
-const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter', collectedRewards: [], speed: 0, level: 1, levelProgress: 0 };
+const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter', speed: 0, level: 1, levelProgress: 0 };
 const effectiveBikeSpeed = (baseSpeed, speed, level) =>
   baseSpeed + Math.min(30, Math.sqrt(Math.max(0, speed)) * 0.25) + Math.min(100, Math.max(0, level - 1)) * 0.3;
 
@@ -39,7 +39,6 @@ function readProfile() {
       wins: Number.isFinite(saved.wins) ? saved.wins : freshProfile.wins,
       finishes: Number.isFinite(saved.finishes) ? saved.finishes : freshProfile.finishes,
       selectedBike: saved.selectedBike ?? freshProfile.selectedBike,
-      collectedRewards: Array.isArray(saved.collectedRewards) ? saved.collectedRewards : [],
       ...sessionProgress,
     };
     profile.speed = Number.isFinite(profile.speed) ? Math.max(0, profile.speed) : freshProfile.speed;
@@ -63,7 +62,6 @@ export default function App() {
   const [presence, setPresence] = useState({ status: 'connecting', count: 1 });
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
   const [notice, setNotice] = useState(null);
-  const [celebration, setCelebration] = useState(null);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
 
@@ -90,7 +88,6 @@ export default function App() {
     composer.addPass(new OutputPass());
 
     const world = buildStartingPlace(scene);
-    world.waveTrack.setCollectedRewards(profileRef.current.collectedRewards);
     world.waveTrack.setRiderLevel(profileRef.current.level);
     bikeRef.current = world.player;
     const detachLeaderboards = world.leaderboards.attach(camera, renderer.domElement);
@@ -107,6 +104,15 @@ export default function App() {
     let riderLevel = profileRef.current.level;
     let lastTrainingPad = null;
     let respawnFreezeUntil = 0;
+    let pendingReturn = null; // { at, rewardId }: a returned trophy's burst is playing; teleport home at `at`
+    const clearKeys = () => {
+      keys.w = false;
+      keys.a = false;
+      keys.s = false;
+      keys.d = false;
+      keys.space = false;
+      camera.userData.steer = 0;
+    };
     let speedPopupAccum = 0;
     let lastSpeedPopupTime = 0;
     const SPEED_POPUP_INTERVAL = 0.35; // seconds between popups, so one shows per short burst of driving instead of every frame
@@ -174,19 +180,26 @@ export default function App() {
       if (!active) return;
       const delta = Math.min((now - previous) / 1000, 0.05);
       previous = now;
+      if (pendingReturn && now >= pendingReturn.at) {
+        // The burst is over: bring the trophy back so it can be collected again, teleport home and
+        // hand control straight back.
+        world.waveTrack.restoreReward(pendingReturn.rewardId);
+        world.player.position.set(0, 0, 0);
+        world.player.rotation.set(0, 0, 0);
+        world.player.userData.grounded = true;
+        world.player.userData.jumpVelocity = 0;
+        pendingReturn = null;
+      }
       const previousX = world.player.position.x;
       const previousZ = world.player.position.z;
-      if (now >= respawnFreezeUntil) {
+      if (pendingReturn) {
+        clearKeys(); // stay on the mat while the burst plays
+      } else if (now >= respawnFreezeUntil) {
         updateMovement(world.player, keys, delta, world.collision, camera);
       } else {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
-        camera.userData.steer = 0;
-        keys.w = false;
-        keys.a = false;
-        keys.s = false;
-        keys.d = false;
-        keys.space = false;
+        clearKeys();
       }
       const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
       const overlappingPad = checkBoostPadOverlap(world.boostPads, world.player.position);
@@ -206,23 +219,15 @@ export default function App() {
 
       const reward = world.player.userData.grounded ? world.waveTrack.rewardAt(world.player.position) : null;
       if (reward && world.waveTrack.collectReward(reward.id)) {
-        respawnFreezeUntil = now + 3000;
-        const totalWins = profileRef.current.wins + reward.wins;
         setProfile((current) => ({
           ...current,
           wins: current.wins + reward.wins,
-          collectedRewards: [...current.collectedRewards, reward.id],
         }));
-        setCelebration({ id: Date.now(), rewardWins: reward.wins, totalWins });
-        world.player.position.set(0, 0, 0);
-        world.player.rotation.set(0, 0, 0);
-        world.player.userData.grounded = true;
-        world.player.userData.jumpVelocity = 0;
-        keys.w = false;
-        keys.a = false;
-        keys.s = false;
-        keys.d = false;
-        keys.space = false;
+        // Zoom back in to the normal chase view if zoomed out, burst confetti, and teleport home after it.
+        if (camera.userData.zoomTarget > 1) camera.userData.zoomTarget = 1;
+        world.returnBursts.spawn(world.player.position, now / 1000);
+        pendingReturn = { at: now + world.returnBursts.duration * 1000, rewardId: reward.id };
+        clearKeys();
       }
 
       const earnedSpeed = Math.floor(speedGainRemainder);
@@ -295,20 +300,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const { wins, finishes, selectedBike, collectedRewards } = profile;
-    sessionStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike, collectedRewards }));
+    const { wins, finishes, selectedBike } = profile;
+    sessionStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike }));
     sessionStorage.setItem(SESSION_PROGRESS_KEY, JSON.stringify({
       speed: profile.speed,
       level: profile.level,
       levelProgress: profile.levelProgress,
     }));
   }, [profile]);
-
-  useEffect(() => {
-    if (!celebration) return undefined;
-    const timer = setTimeout(() => setCelebration(null), 3000);
-    return () => clearTimeout(timer);
-  }, [celebration]);
 
   useEffect(() => {
     const bike = BIKES.find((item) => item.id === profile.selectedBike);
@@ -373,7 +372,6 @@ export default function App() {
         wins={profile.wins}
         finishes={profile.finishes}
         notice={notice}
-        celebration={celebration}
         onWavesChange={(disabled) => worldRef.current?.setWavesEnabled(!disabled)}
         selectedBike={profile.selectedBike}
         onSelectBike={selectBike}

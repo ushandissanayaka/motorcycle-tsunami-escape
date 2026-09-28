@@ -10,6 +10,7 @@ import { createGroupChestArea } from '../entities/GroupChestArea.js';
 import { createLuckyStage } from '../entities/LuckyStage.js';
 import { createWaveTrack } from '../entities/WaveTrack.js';
 import { createSpeedPopups } from '../entities/SpeedPopup.js';
+import { createReturnBursts } from '../entities/ReturnBurst.js';
 import { createTsunami } from '../entities/Tsunami.js';
 import { createSky } from '../entities/Sky.js';
 import { createCollision } from '../systems/collision.js';
@@ -92,6 +93,7 @@ export function buildStartingPlace(scene) {
   const player = createPlayer();
   scene.add(player);
   const speedPopups = createSpeedPopups(scene);
+  const returnBursts = createReturnBursts(scene);
 
   // Training boards line up on the pad, south to north, with their monitors on the east side
   // and the ramps facing the stem road.
@@ -187,9 +189,10 @@ export function buildStartingPlace(scene) {
     sky.userData.update(time);
     lights.followRider(player.position);
     speedPopups.update(time);
+    returnBursts.update(time);
   };
 
-  return { player, boostPads, store, collision, update, leaderboards, waveTrack, speedPopups, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
+  return { player, boostPads, store, collision, update, leaderboards, waveTrack, speedPopups, returnBursts, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
 }
 
 // The sun stands low over the far south-west corner, behind the Group Chest, so everything throws its shadow

@@ -106,6 +106,9 @@ export default function App() {
     let riderLevel = profileRef.current.level;
     let lastTrainingPad = null;
     let respawnFreezeUntil = 0;
+    let speedPopupAccum = 0;
+    let lastSpeedPopupTime = 0;
+    const SPEED_POPUP_INTERVAL = 0.35; // seconds between popups, so one shows per short burst of driving instead of every frame
 
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer) return;
@@ -224,6 +227,7 @@ export default function App() {
       if (earnedSpeed > 0) {
         speedGainRemainder -= earnedSpeed;
         speedProgress += earnedSpeed;
+        speedPopupAccum += earnedSpeed;
         const levelTotal = levelProgress + earnedSpeed;
         const levelsGained = Math.floor(levelTotal / 100);
         riderLevel += levelsGained;
@@ -232,6 +236,12 @@ export default function App() {
         if (levelsGained > 0) {
           setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });
         }
+      }
+      const nowSeconds = now / 1000;
+      if (speedPopupAccum > 0 && nowSeconds - lastSpeedPopupTime > SPEED_POPUP_INTERVAL) {
+        world.speedPopups.spawn(world.player.position, speedPopupAccum, nowSeconds, world.player.rotation.y);
+        speedPopupAccum = 0;
+        lastSpeedPopupTime = nowSeconds;
       }
       updateChaseCamera(camera, world.player);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera);

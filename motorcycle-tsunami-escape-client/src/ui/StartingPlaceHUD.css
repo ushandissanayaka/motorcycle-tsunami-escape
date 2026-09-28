@@ -46,7 +46,13 @@
 .garage-popover .bike-art { height: 42px; }
 .garage-close { position: absolute; z-index: 2; top: 7px; right: 7px; width: 25px; height: 25px; border: 2px solid #111827; border-radius: 50%; background: #ff5158; color: white; font-size: 11px !important; font-weight: 1000; cursor: pointer; }
 
-.game-toast { position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%); padding: 13px 22px; border: 3px solid #111827; border-radius: 12px; background: #182536ed; color: white; font-size: 15px; text-align: center; box-shadow: 0 8px 25px #0008; }
+.game-toast {
+  position: absolute; top: 48%; left: 50%; transform: translate(-50%, -50%);
+  max-width: min(80vw, 700px); padding: 13px 26px; text-align: center;
+  /* Same white-fill, black-stroke letter style as the rest of the HUD's big numbers (.outlined), just wrapped for longer messages. No background box: the stroke alone keeps it readable over gameplay. */
+  color: #fff; -webkit-text-stroke: calc(7 * var(--u)) #0c0c0c; paint-order: stroke fill;
+  font-size: calc(40 * var(--u)); line-height: 1.25; white-space: normal;
+}
 .win-celebration { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; overflow: hidden; background: radial-gradient(circle at center, #30235dcc, #090d20d9 72%); pointer-events: none; animation: celebration-in 260ms ease-out both; }
 .celebration-card { display: flex; width: min(460px, 84vw); flex-direction: column; align-items: center; gap: 8px; padding: 28px 24px; border: 5px solid #ffd837; border-radius: 24px; background: linear-gradient(155deg, #6624b9f5, #171b55f5 68%, #a52c76f5); color: #fff; text-align: center; box-shadow: 0 0 0 5px #24123c, 0 0 55px #ffe14dcc; animation: celebration-pop 520ms cubic-bezier(.18,.88,.34,1.25) both; }
 .celebration-trophy { font-size: 76px; line-height: 1; filter: drop-shadow(0 5px 0 #9c6200); }

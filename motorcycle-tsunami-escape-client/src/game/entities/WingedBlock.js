@@ -192,26 +192,33 @@ function buildFace(face, unit) {
   // Lift or lower the art so the cube's centre sits at the group's origin.
   if (face.cubeY) group.position.y = ((face.cubeY[0] + face.cubeY[1]) / 2 - artHeight / 2) * unit;
 
-  const sprites = {};
+  const pivots = {};
   for (const [key, part] of Object.entries(parts)) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: part.texture, transparent: true, depthWrite: false, toneMapped: false }));
-    sprite.scale.set(part.width, height, 1);
-    sprite.renderOrder = key === 'body' ? 2 : 1;
-    group.add(sprite);
-    sprites[key] = sprite;
+    // These are world-facing planes, not camera-facing sprites. Sprites stay flat toward
+    // the camera, which makes the wings slide across the body when orbiting the camera.
+    const pivot = new THREE.Group();
+    pivot.position.x = part.x;
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(part.width, height),
+      new THREE.MeshBasicMaterial({ map: part.texture, transparent: true, depthWrite: false, toneMapped: false, side: THREE.DoubleSide }),
+    );
+    mesh.position.x = part.pivot === 0 ? part.width / 2 : part.pivot === 1 ? -part.width / 2 : 0;
+    mesh.renderOrder = key === 'body' ? 2 : 1;
+    pivot.add(mesh);
+    group.add(pivot);
+    pivots[key] = pivot;
   }
-  // Sprites turn about their own centre, so a wing is swung about its shoulder by moving the sprite along an arc
-  // (`side` is -1 for the left wing, +1 for the right) while rotating it by the same angle.
+  // Each wing plane rotates in the block's own plane around its shoulder.
   const swing = (key, side, angle) => {
     const part = parts[key];
-    const sprite = sprites[key];
+    const pivot = pivots[key];
     const turn = side * angle;
-    sprite.material.rotation = turn;
-    sprite.position.set(part.shoulder + side * (part.width / 2) * Math.cos(turn), side * (part.width / 2) * Math.sin(turn), 0);
+    pivot.position.set(part.shoulder, 0, 0);
+    pivot.rotation.z = turn;
   };
   parts.left.shoulder = (bodyLeft - artWidth / 2) * unit + WING_OVERLAP * unit; // where the wing meets the body
   parts.right.shoulder = (bodyRight - artWidth / 2) * unit - WING_OVERLAP * unit;
-  sprites.body.position.x = parts.body.x;
+  pivots.body.position.x = parts.body.x;
   swing('left', -1, 0);
   swing('right', 1, 0);
 

@@ -3,7 +3,7 @@ import { STEP_HEIGHT } from './collision.js';
 import { clampToMap } from '../../shared/constants.js';
 
 const TURN_SPEED = 2.4; // radians/sec
-const MOVE_SPEED = 9; // units/sec, tune per your world scale
+const MOVE_SPEED = 12; // units/sec, tune per your world scale
 const JUMP_SPEED = 6; // units/sec upward
 const GRAVITY = 16; // units/sec^2
 
@@ -85,7 +85,7 @@ function stepVertical(target, dt, collision) {
  * rider fast enough to cross a pit before gravity pulls them down clears it.
  * Swap for lane-strafe controls once you build the endless-runner
  * road scene. */
-export function updateMovement(target, keys, deltaSeconds, collision = null) {
+export function updateMovement(target, keys, deltaSeconds, collision = null, camera = null) {
   if (keys.a) target.rotation.y += TURN_SPEED * deltaSeconds;
   if (keys.d) target.rotation.y -= TURN_SPEED * deltaSeconds;
 
@@ -103,13 +103,14 @@ export function updateMovement(target, keys, deltaSeconds, collision = null) {
     target.userData.grounded = false;
   }
 
-  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(target.quaternion);
+  // Drive along the bike's heading. Camera orbit is independent of bike steering.
+  const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), target.rotation.y);
   const speed = target.userData.moveSpeed || MOVE_SPEED;
   const drive = (keys.w ? speed : 0) - (keys.s ? speed * 0.6 : 0);
   const distance = Math.abs(drive) * deltaSeconds;
   const steps = Math.max(1, Math.ceil(distance / MAX_SUBSTEP));
-  const stepX = (forward.x * Math.sign(drive) * distance) / steps;
-  const stepZ = (forward.z * Math.sign(drive) * distance) / steps;
+  const stepX = forward.x * Math.sign(drive) * distance / steps;
+  const stepZ = forward.z * Math.sign(drive) * distance / steps;
   for (let i = 0; i < steps; i += 1) {
     if (drive !== 0) moveWithCollision(target, stepX, stepZ, collision);
     stepVertical(target, deltaSeconds / steps, collision);

@@ -121,6 +121,7 @@ export default function App() {
             scene.add(rider);
             remoteRiders.set(remote.sessionId, rider);
           }
+          rider.userData.setBikeModel?.(remote.equippedBike);
           rider.userData.setBikeColor?.(rideColor(bike));
           rider.position.set(remote.x, remote.y, remote.z);
           rider.rotation.y = remote.rotY;
@@ -150,7 +151,7 @@ export default function App() {
       const previousX = world.player.position.x;
       const previousZ = world.player.position.z;
       if (now >= respawnFreezeUntil) {
-        updateMovement(world.player, keys, delta, world.collision);
+        updateMovement(world.player, keys, delta, world.collision, camera);
       } else {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
@@ -277,6 +278,7 @@ export default function App() {
   useEffect(() => {
     const bike = BIKES.find((item) => item.id === profile.selectedBike);
     if (bikeRef.current && bike) {
+      bikeRef.current.userData.setBikeModel?.(bike.id);
       bikeRef.current.userData.setBikeColor?.(rideColor(bike));
       bikeRef.current.userData.moveSpeed = bike.speed;
     }

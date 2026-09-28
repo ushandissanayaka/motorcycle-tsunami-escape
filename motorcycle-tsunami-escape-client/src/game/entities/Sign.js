@@ -49,11 +49,11 @@ export function signSprite(text, { fontSize, color, strokeColor, strokeEm, width
 }
 
 /** White title over a yellow subtitle. `scale` sizes the whole sign; the base numbers suit "LUCKY BLOCKS". */
-export function createTitledSign({ title, subtitle, titleSize = 2.05, titleWidth = 21.2, subtitleSize = 1.07, subtitleWidth = 26.4, scale = 1 }) {
+export function createTitledSign({ title, subtitle, titleSize = 2.05, titleWidth = 21.2, subtitleSize = 1.07, subtitleWidth = 26.4, subtitleColor = '#ffc41a', scale = 1 }) {
   const sign = new THREE.Group();
   const top = signSprite(title, { fontSize: titleSize * scale, color: '#ffffff', strokeColor: '#1b1140', strokeEm: 0.17, width: titleWidth * scale, height: 3.45 * scale });
   top.position.y = 7.9 * scale;
-  const bottom = signSprite(subtitle, { fontSize: subtitleSize * scale, color: '#ffc41a', strokeColor: '#23163a', strokeEm: 0.22, width: subtitleWidth * scale, height: 2 * scale });
+  const bottom = signSprite(subtitle, { fontSize: subtitleSize * scale, color: subtitleColor, strokeColor: '#23163a', strokeEm: 0.22, width: subtitleWidth * scale, height: 2 * scale });
   bottom.position.y = 5.45 * scale;
   sign.add(top, bottom);
   return sign;

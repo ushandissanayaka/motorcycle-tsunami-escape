@@ -68,6 +68,7 @@ export default function App() {
   const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
   const [notice, setNotice] = useState(null);
   const [bikePurchaseOpen, setBikePurchaseOpen] = useState(false);
+  const [aetherunePurchaseOpen, setAetherunePurchaseOpen] = useState(false);
   const [premiumBoardPurchase, setPremiumBoardPurchase] = useState(null);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
@@ -296,6 +297,10 @@ export default function App() {
         camera.userData.focusPoint = new THREE.Vector3(pad.position.x, 1.8, pad.position.z);
         camera.userData.zoomTarget = 0.4;
         setPremiumBoardPurchase(`${pad.userData.multiplier}x`);
+      }, () => {
+        camera.userData.focusPoint = new THREE.Vector3(11.8, 3, -22.1);
+        camera.userData.zoomTarget = 0.4;
+        setAetherunePurchaseOpen(true);
       });
       if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
         world.player.position.set(0, 0, 0);
@@ -433,9 +438,11 @@ export default function App() {
         finishes={profile.finishes}
         notice={notice}
         bikePurchaseOpen={bikePurchaseOpen}
+        aetherunePurchaseOpen={aetherunePurchaseOpen}
         premiumBoardPurchase={premiumBoardPurchase}
         onClosePurchase={() => {
           setBikePurchaseOpen(false);
+          setAetherunePurchaseOpen(false);
           setPremiumBoardPurchase(null);
           if (cameraRef.current) {
             cameraRef.current.userData.focusPoint = null;

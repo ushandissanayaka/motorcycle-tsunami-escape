@@ -166,6 +166,7 @@ export function buildStartingPlace(scene, renderer) {
   display.group.position.set(11.8, 0, -22.1); // on the east strip, north end, as in the reference
   scene.add(display.group);
   let insideAstralwingRing = false;
+  let insideAetheruneDisplay = false;
 
   const nextEvent = createNextEventBoard();
   nextEvent.group.position.set(NEXT_EVENT_POSITION.x, NEXT_EVENT_POSITION.y, NEXT_EVENT_POSITION.z);
@@ -173,7 +174,7 @@ export function buildStartingPlace(scene, renderer) {
   scene.add(nextEvent.group);
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
-  const update = (time, onStorePad, camera, onAstralwingRing, onPremiumBoard) => {
+  const update = (time, onStorePad, camera, onAstralwingRing, onPremiumBoard, onAetheruneDisplay) => {
     // Keeps track built around the rider, in front and behind (see WaveTrack.js). collision.solids and
     // collision.surfaces are their own arrays (built once from several sources), so the track's changes are
     // mirrored into them here by reference.
@@ -194,6 +195,11 @@ export function buildStartingPlace(scene, renderer) {
     const insideRing = ringX * ringX + ringZ * ringZ < 1;
     if (insideRing && !insideAstralwingRing) onAstralwingRing?.();
     insideAstralwingRing = insideRing;
+    const aetheruneX = player.position.x - display.group.position.x;
+    const aetheruneZ = player.position.z - display.group.position.z;
+    const nearAetherune = aetheruneX * aetheruneX + aetheruneZ * aetheruneZ < 25;
+    if (nearAetherune && !insideAetheruneDisplay) onAetheruneDisplay?.();
+    insideAetheruneDisplay = nearAetherune;
     const premiumBoard = boostPads.find((pad) => [3, 9, 25, 100].includes(pad.userData.multiplier)
       && Math.abs(player.position.x - pad.position.x) < pad.userData.halfSize.x + 2
       && Math.abs(player.position.z - pad.position.z) < pad.userData.halfSize.z + 2);

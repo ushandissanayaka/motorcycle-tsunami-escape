@@ -10,6 +10,17 @@
     <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Fredoka:wght@700&family=Montserrat:wght@800&display=swap" rel="stylesheet" />
     <!-- Pinned v1 build for production stability -->
     <script src="https://sdk.bloxity.io/v1/legion-sdk.min.js"></script>
+    <script>
+      // Show the splash once per tab. A reconnect-triggered document reload must not flash it again.
+      try {
+        const splashSeenKey = 'mte-loading-screen-seen';
+        if (sessionStorage.getItem(splashSeenKey)) {
+          document.documentElement.classList.add('skip-initial-loading');
+        } else {
+          sessionStorage.setItem(splashSeenKey, '1');
+        }
+      } catch {}
+    </script>
     <!-- Loading screen: plain HTML so it paints before the game's scripts have even arrived; the game fades it
          out once everything is loaded (see src/ui/loadingScreen.js). Sizes follow the 1920 x 1001 reference
          layout, scaled by --u to fit any screen. -->
@@ -19,6 +30,7 @@
         position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: #0d1a14;
         font-family: "Segoe UI", "Helvetica Neue", Roboto, Arial, sans-serif;
         transition: opacity 0.45s ease; }
+      .skip-initial-loading #loading-screen { display: none; }
       #loading-screen.loading-screen--done { opacity: 0; pointer-events: none; }
       /* The blurred art drifts slowly from side to side; only a transform animates, so it stays on the GPU. */
       #loading-screen .loading-bg {

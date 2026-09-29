@@ -7,7 +7,8 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { initSDK } from './bloxity/sdk.js';
-import { loadingEnd, loadingStep, gameplayStart } from './bloxity/lifecycle.js';
+import { gameplayStart } from './bloxity/lifecycle.js';
+import { hideLoadingScreen } from './ui/loadingScreen.js';
 import { buildStartingPlace } from './game/scenes/StartingPlace.js';
 import { attachCameraControls, createChaseCamera, updateChaseCamera } from './game/systems/camera.js';
 import { createInputState, updateMovement } from './game/systems/movement.js';
@@ -17,7 +18,6 @@ import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLe
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
-import { hideLoadingScreen } from './ui/loadingScreen.js';
 
 const SAVE_KEY = 'mte-starting-place';
 const SESSION_PROGRESS_KEY = 'mte-session-progress';
@@ -75,7 +75,6 @@ export default function App() {
 
   useEffect(() => {
     try { initSDK(); } catch (error) { console.info('Running outside Bloxity portal:', error); }
-    loadingStep('Building your starting place');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9bdcff);
@@ -334,16 +333,13 @@ export default function App() {
     };
     window.addEventListener('resize', resize);
 
-    // The loading screen (index.html) stays up until the bike models and textures have arrived, the web
-    // fonts are in and the first frames are on screen, so the player never sees a half-built scene; then
-    // it fades straight into the game. A stuck download can't hold the game back for more than 20 s.
+    // Tell the portal when gameplay is ready; the game remains visible while optional assets load.
     const firstFrames = new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    const shownBriefly = new Promise((resolve) => setTimeout(resolve, 900)); // no flash on a fast load
+    const shownBriefly = new Promise((resolve) => setTimeout(resolve, 900));
     const ready = Promise.all([whenAssetsLoaded(), document.fonts?.ready, firstFrames, shownBriefly]);
     const giveUp = new Promise((resolve) => setTimeout(resolve, 20000));
     Promise.race([ready, giveUp]).then(() => {
       if (!active) return;
-      loadingEnd();
       gameplayStart();
       hideLoadingScreen();
     });

@@ -179,6 +179,14 @@ export function buildStartingPlace(scene, renderer) {
       collision.solids.push(...waveTrack.solids.slice(knownWaveSolids));
       knownWaveSolids = waveTrack.solids.length;
     }
+    // Frees track the rider has left well behind (see WaveTrack.js), so a long run doesn't keep every
+    // slab and pit ever generated alive forever; collision.solids is its own array (built once from
+    // several sources), so pruned solids are removed from it here by reference, not by re-slicing.
+    for (const solid of waveTrack.pruneBehind(player.position.z)) {
+      const index = collision.solids.indexOf(solid);
+      if (index !== -1) collision.solids.splice(index, 1);
+    }
+    knownWaveSolids = waveTrack.solids.length;
     boostPads.forEach((board) => board.userData.update(time));
     store.update(time, player, onStorePad);
     display.update(time);

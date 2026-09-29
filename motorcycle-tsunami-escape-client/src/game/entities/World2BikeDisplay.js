@@ -5,7 +5,7 @@ import { signSprite } from './Sign.js';
 
 const loader = new GLTFLoader();
 const targetLength = 3.8;
-const BIKE_SCALE = 2.8;
+const BIKE_SCALE = 2.2;
 let loadedModel;
 
 function loadModel() {
@@ -37,9 +37,8 @@ function loadModel() {
   return loadedModel;
 }
 
-// The fire ring is an ellipse around the whole bike: the bike is turned so its length (targetLength x BIKE_SCALE,
-// about 10.6 units) runs along X, so the ring is long in X and narrower in Z.
-const RING = { rx: 6.4, rz: 3.2 };
+// A circular fire ring surrounds the slightly smaller display bike.
+const RING = { rx: 4.5, rz: 4.5 };
 
 const NOISE = /* glsl */ `
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -52,7 +51,7 @@ float noise(vec2 p) {
 float fbm(vec2 p) {
   float v = 0.0;
   float a = 0.5;
-  for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
+  for (int i = 0; i < 2; i++) { v += a * noise(p); p *= 2.03; a *= 0.5; }
   return v;
 }
 `;
@@ -91,7 +90,7 @@ void main() {
   vec4 mv = viewMatrix * modelMatrix * vec4(p, 1.0);
   gl_Position = projectionMatrix * mv;
   float size = mix(1.7, 0.45, life) * (0.75 + 0.55 * aSeed.z);
-  gl_PointSize = min(size * projectionMatrix[1][1] * uViewport / -mv.z, 320.0);
+  gl_PointSize = min(size * projectionMatrix[1][1] * uViewport / -mv.z, 96.0);
   vLife = life;
   vSeed = aSeed.z * 10.0 + aSeed.x * 7.0;
   vHeatBias = aSeed.z * 0.25;
@@ -214,7 +213,7 @@ function addFireRing(group) {
 
   // Scorched ground inside the ring.
   const scorch = flat(new THREE.Mesh(new THREE.CircleGeometry(1, 64), new THREE.MeshStandardMaterial({ color: 0x1a0c07, roughness: 0.95 })), 0.02);
-  scorch.scale.set(RING.rx + 0.7, RING.rz + 0.7, 1);
+  scorch.scale.set(RING.rx + 0.45, RING.rz + 0.45, 1);
 
   // The burning band the flames grow out of, and the wide glow the fire throws on the ground around it.
   const band = flat(new THREE.Mesh(
@@ -226,13 +225,13 @@ function addFireRing(group) {
     new THREE.PlaneGeometry(2, 2),
     new THREE.MeshBasicMaterial({ map: radialTexture(), color: 0xff5a10, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })
   ), 0.05);
-  glow.scale.set(RING.rx + 3, RING.rz + 3, 1);
+  glow.scale.set(RING.rx + 2, RING.rz + 2, 1);
 
-  const fire = particles(group, 1200, FIRE_VERTEX, FIRE_FRAGMENT, { uHeight: { value: 4.2 } });
-  const embers = particles(group, 320, EMBER_VERTEX, EMBER_FRAGMENT, { uHeight: { value: 10 } });
+  const fire = particles(group, 420, FIRE_VERTEX, FIRE_FRAGMENT, { uHeight: { value: 4.2 } });
+  const embers = particles(group, 96, EMBER_VERTEX, EMBER_FRAGMENT, { uHeight: { value: 10 } });
 
   // Flickering firelight so the bike is lit orange from below.
-  const light = new THREE.PointLight(0xff7a24, 40, 18, 1.6);
+  const light = new THREE.PointLight(0xff7a24, 24, 14, 1.6);
   light.position.y = 1.2;
   group.add(light);
 
@@ -240,7 +239,7 @@ function addFireRing(group) {
     fire.uTime.value = time;
     embers.uTime.value = time;
     const flicker = Math.sin(time * 13) * 0.5 + Math.sin(time * 21 + 1.3) * 0.3 + Math.sin(time * 7.7) * 0.2;
-    light.intensity = 40 + flicker * 10;
+    light.intensity = 24 + flicker * 5;
     band.material.opacity = 0.5 + flicker * 0.1;
     glow.material.opacity = 0.32 + flicker * 0.06;
   };

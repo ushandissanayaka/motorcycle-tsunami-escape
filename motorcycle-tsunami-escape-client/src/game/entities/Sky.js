@@ -13,7 +13,10 @@ import * as THREE from 'three';
  * post-processing chain that re-encodes them.
  */
 
-const CUBE_SIZE = 1536;
+// Baked once at startup: the fragment shader is expensive (several fbm/worley layers), so this size is a
+// direct trade against load-time stutter. The dome is smooth and always seen from a distance, so a fairly
+// low resolution still looks sharp — no need to pay for the full-detail size here.
+const CUBE_SIZE = 768;
 
 /** `vec3 skyColor(vec3 dir)`: the whole painted sky for a unit world direction. */
 export const SKY_CHUNK = /* glsl */ `

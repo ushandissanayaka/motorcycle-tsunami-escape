@@ -14,7 +14,10 @@ export const RIDER_HEIGHT = 2.4;
  * them drops to `floor`. A pit's walls are ordinary solids reaching down to it.
  */
 export function createCollision(solids = [], pits = [], surfaces = []) {
-  const inside = (s, x, z) => x >= s.minX && x <= s.maxX && z >= s.minZ && z <= s.maxZ;
+  const inside = (s, x, z, margin = 0) => (
+    x >= s.minX - margin && x <= s.maxX + margin
+    && z >= s.minZ - margin && z <= s.maxZ + margin
+  );
   const topAt = (s, x, z) => (typeof s.top === 'function' ? s.top(x, z) : s.top);
   const groundAt = (x, z) => pits.find((p) => inside(p, x, z))?.floor ?? 0;
 
@@ -24,7 +27,11 @@ export function createCollision(solids = [], pits = [], surfaces = []) {
     surfaces,
 
     blocked(x, z, y) {
-      return solids.some((s) => inside(s, x, z) && s.bottom < y + RIDER_HEIGHT && topAt(s, x, z) > y + STEP_HEIGHT);
+      return solids.some((s) => (
+        inside(s, x, z, s.collisionMargin || 0)
+        && s.bottom < y + RIDER_HEIGHT
+        && topAt(s, x, z) > y + STEP_HEIGHT
+      ));
     },
 
     /** Height of the surface a rider at (x, y, z) stands on. */

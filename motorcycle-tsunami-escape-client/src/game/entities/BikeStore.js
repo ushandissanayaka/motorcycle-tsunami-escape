@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { BIKES, requirementText } from '../../shared/constants.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
 import { createStoreBike } from './StoreBikes.js';
+import { batchStatic } from '../util/staticBatch.js';
 
 /**
  * Two-level bike store. Built in a local frame facing +Z (front) with the
@@ -280,6 +281,12 @@ export function createBikeStore({ position, bikes = BIKES }) {
   const header = createHeader('BLOOD MOON BIKES');
   header.position.set(HEADER.x, HEADER.y, HEADER.z);
   group.add(header);
+
+  // Each display bike is hundreds of small parts that only ever move together (its holder bobs), and the
+  // building around them never moves: batch both so the store costs a few dozen draw calls, not ~550.
+  // The pads are left alone, since setStates recolours them.
+  for (const entry of entries) batchStatic(entry.holder);
+  batchStatic(group, { exclude: [...entries.map((entry) => entry.pad), ...entries.map((entry) => entry.holder)] });
 
   // ---- world-space colliders ----------------------------------------------
   const bx = position.x;

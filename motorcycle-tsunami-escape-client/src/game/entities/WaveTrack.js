@@ -1,5 +1,7 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture, mulberry32 } from '../util/textures.js';
+import { batchStatic } from '../util/staticBatch.js';
 
 /**
  * The wave place: a long run of black asphalt slabs, level with the road,
@@ -209,7 +211,7 @@ uniform float uRedLength;`)
   return material;
 }
 
-export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth, firstGap, gapGrowth, pitDepth }) {
+export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstGap, gapGrowth, pitDepth }) {
   const group = new THREE.Group();
   const width = x1 - x0;
   const centerX = (x0 + x1) / 2;
@@ -218,7 +220,6 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
   const surfaces = [];
   const rewards = [];
   let riderLevel = 1;
-  const vipRandom = mulberry32(8123);
   const vipMaterial = new THREE.MeshStandardMaterial({ map: vipBoardTexture(), roughness: 0.7, emissive: 0xffffff, emissiveMap: vipBoardTexture(), emissiveIntensity: 0.25 });
   const vipBack = new THREE.MeshStandardMaterial({ color: 0xc9b02e, roughness: 0.8 });
   const padBase = new THREE.MeshStandardMaterial({ color: 0x3a3a46, roughness: 0.8 });
@@ -238,7 +239,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
   const dashMaterial = new THREE.MeshStandardMaterial({ color: 0xf7c928, emissive: 0x4a3a00 });
 
   // Materials declared above are shared by every segment forever; a segment's own generated
-  // geometry (and, for its reward pad, its own material and label texture) is what pruneBehind
+  // geometry (and, for its reward pad, its own material and label texture) is what `update`
   // below has to free again, so it must never dispose one of these.
   const sharedMaterials = new Set([asphalt, curb, hollowFloor, canyonRock, canyonGrass, dashMaterial, vipMaterial, vipBack, padBase]);
 
@@ -254,8 +255,12 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     return mesh;
   };
 
-  // Low canyon walls continue with every new slab and pit, keeping the end of the run open to the sky.
-  const sideWalls = (startZ, endZ, floorY, wallTops) => {
+  // Low canyon walls continue with every new slab and pit, in short overlapping chunks for a stepped,
+  // varied-height green top. A slab-and-pit pair can need well over a hundred of these once the track
+  // has grown deep into a long run, so rather than one draw call per chunk (as `box()` would give it),
+  // each chunk's geometry is baked to its final world position and collected in `rockGeoms`/`capGeoms`;
+  // the caller merges everything gathered for the segment into two meshes once it's done adding to them.
+  const sideWalls = (startZ, endZ, floorY, wallTops, rockGeoms, capGeoms) => {
     for (const [index, side] of [-1, 1].entries()) {
       const wallX = centerX + side * (width / 2 + SIDE_WALL_WIDTH / 2 - 0.15);
       let cursor = startZ;
@@ -269,28 +274,47 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
         const wallTop = THREE.MathUtils.clamp(wallTops[index] + step, SIDE_WALL_MIN_TOP, SIDE_WALL_MIN_TOP + SIDE_WALL_TOP_RANGE);
         const wallHeight = wallTop - floorY;
         const overlap = chunkIndex === 0 ? 0.25 : 0.5;
-        box(SIDE_WALL_WIDTH, wallHeight, chunkDepth + overlap, canyonRock, wallX, floorY + wallHeight / 2, midZ, 4.5);
-        box(SIDE_WALL_CAP_WIDTH, 0.8, chunkDepth + overlap, canyonGrass, wallX, wallTop + 0.4, midZ, 4.5);
+        rockGeoms.push(applyWorldUV(new THREE.BoxGeometry(SIDE_WALL_WIDTH, wallHeight, chunkDepth + overlap), 4.5)
+          .translate(wallX, floorY + wallHeight / 2, midZ));
+        capGeoms.push(applyWorldUV(new THREE.BoxGeometry(SIDE_WALL_CAP_WIDTH, 0.8, chunkDepth + overlap), 4.5)
+          .translate(wallX, wallTop + 0.4, midZ));
         cursor = nextZ;
         chunkIndex += 1;
       }
     }
   };
 
-  // Slabs generated so far, oldest first: the pieces `pruneBehind` frees once the rider is well past them.
-  const segments = [];
+  /** One mesh per material from geometries already baked to their world position (see `sideWalls`). */
+  const mergeInto = (target, geometries, material) => {
+    if (!geometries.length) return;
+    const mesh = new THREE.Mesh(mergeGeometries(geometries), material);
+    mesh.receiveShadow = true;
+    mesh.castShadow = true;
+    target.add(mesh);
+  };
 
-  let z = zStart; // south edge of the next piece
-  let generatedSlabs = 0;
-  const generateNextSegment = () => {
-    const i = generatedSlabs;
-    const segStartZ = z;
+  // The track is a fixed, endless sequence of segments (a slab and the pit after it): segment i's position
+  // and look depend only on i, so any segment can be built, freed and built again later identically.
+  // Only the ones near the rider exist at a time (see `update`), whichever way the rider is going,
+  // including straight back to the start after a tsunami catches them or they collect a reward.
+  /** South (entrance-side) edge of segment i; segment i runs from here north to segmentStart(i + 1). */
+  const segmentStart = (i) => zStart - (i * (slabLength + firstGap) + ((slabGrowth + gapGrowth) * i * (i - 1)) / 2);
+  const built = new Map(); // segment index -> { meshGroup, solid, pit, surfaces, rewards }
+  const claimedRewards = new Set(); // reward ids collected and not yet restored, kept across rebuilds
+
+  const buildSegment = (i) => {
+    let z = segmentStart(i);
+    const vipRandom = mulberry32(8123 + i * 7919);
     // This segment's own group, so its meshes can be detached and disposed as one unit later.
     const segmentGroup = new THREE.Group();
     group.add(segmentGroup);
     activeGroup = segmentGroup;
     const segmentSurfaces = [];
     const segmentRewards = [];
+    // Every side-wall chunk for this segment (slab and pit both) lands in these two, merged into two
+    // meshes once the segment is complete, instead of a draw call per chunk.
+    const rockGeoms = [];
+    const capGeoms = [];
 
     const wallTops = [-1, 1].map((side, sideIndex) => (
       SIDE_WALL_MIN_TOP + (0.5 + 0.5 * Math.sin(i * 1.7 + sideIndex * 2.3)) * SIDE_WALL_TOP_RANGE
@@ -302,7 +326,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     // A slab is a solid block from the pit floor up to road level: its dark studded ends are the
     // pit walls, curbs run along its sides and a dashed line down its centre.
     box(width, columnHeight, length, asphalt, centerX, columnY, midZ);
-    sideWalls(z, zBack, wallFoot, wallTops);
+    sideWalls(z, zBack, wallFoot, wallTops, rockGeoms, capGeoms);
     const solid = { minX: x0, maxX: x1, minZ: zBack, maxZ: z, bottom: floorTop, top: 0 };
     solids.push(solid);
     for (const side of [-1, 1]) {
@@ -335,7 +359,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
       const pit = { minX: x0, maxX: x1, minZ: z - gap, maxZ: z, floor: -pitDepth };
       pits.push(pit);
       box(width, 0.1, gap, hollowFloor, centerX, floorTop - 0.05, gapMid, 4.8);
-      sideWalls(z, z - gap, wallFoot, wallTops);
+      sideWalls(z, z - gap, wallFoot, wallTops, rockGeoms, capGeoms);
       for (const side of [-1, 1]) {
         // Lavender pit wall, just in front of the canyon rock (which starts 0.15 inside the track edge).
         box(PIT_WALL_THICKNESS, columnHeight - 0.02, gap, curb, centerX + side * (width / 2 - 0.15 - PIT_WALL_THICKNESS / 2), columnY - 0.01, gapMid, 4.5);
@@ -380,8 +404,11 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
         rewardArt.add(returnLabel);
         pickup.add(rewardArt);
         segmentGroup.add(pickup);
+        const id = `wave-reward-v5-${i + 1}-${sideName}`;
+        const claimed = claimedRewards.has(id);
+        rewardArt.visible = !claimed;
         const reward = {
-          id: `wave-reward-v5-${i + 1}-${sideName}`,
+          id,
           wins,
           x: padX,
           z: padZ,
@@ -392,64 +419,84 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
           rewardArt,
           returnLabel,
           requiredLevel: sideName === 'red' ? RED_REWARD_LEVEL : 1,
-          claimed: false,
+          claimed,
         };
         returnLabel.visible = riderLevel >= reward.requiredLevel;
         rewards.push(reward);
         segmentRewards.push(reward);
       }
       z -= gap;
-      segments.push({ zTop: segStartZ, zBottom: z, meshGroup: segmentGroup, solid, pit, surfaces: segmentSurfaces, rewards: segmentRewards });
+      mergeInto(segmentGroup, rockGeoms, canyonRock);
+      mergeInto(segmentGroup, capGeoms, canyonGrass);
+      // The slab, curbs, dashes, pit floor and pit walls never move: one draw call per material. The
+      // reward pickups stay separate, since collecting one hides its label.
+      batchStatic(segmentGroup, { exclude: segmentRewards.map((reward) => reward.group) });
+      built.set(i, { meshGroup: segmentGroup, solid, pit, surfaces: segmentSurfaces, rewards: segmentRewards });
     }
     activeGroup = group;
-    generatedSlabs += 1;
   };
 
-  // Build the visible starting run, then append sections as the rider approaches its end.
-  for (let i = 0; i < slabs; i += 1) generateNextSegment();
-  // Keep enough track ahead for the pulled-back camera, while still generating it during play.
-  const ensureAhead = (playerZ, lookAhead = 220) => {
-    while (z > playerZ - lookAhead) generateNextSegment();
+  const disposeSegment = (i) => {
+    const segment = built.get(i);
+    built.delete(i);
+    group.remove(segment.meshGroup);
+    segment.meshGroup.traverse((object) => {
+      if (object.isMesh) {
+        object.geometry.dispose();
+        if (!sharedMaterials.has(object.material)) object.material.dispose();
+      } else if (object.isSprite) {
+        // Sprite geometry is a single instance three.js shares across every sprite in the app: never dispose it.
+        const map = object.material.map;
+        if (map && map !== returnTexture && map !== vipTexture) map.dispose();
+        object.material.dispose();
+      }
+    });
+    removeFrom(solids, segment.solid);
+    removeFrom(pits, segment.pit);
+    for (const surface of segment.surfaces) removeFrom(surfaces, surface);
+    for (const reward of segment.rewards) removeFrom(rewards, reward);
+    return segment;
   };
 
-  // Segments are freed once the rider has moved this far past their far (north) edge: generous headroom
-  // over ensureAhead's lookAhead above, so nothing disappears while still in view (even pulled back at
-  // max zoom), but a long run never keeps more than a short, bounded stretch of old track alive behind
-  // the rider — otherwise every slab and pit ever generated would sit in the scene and the collision
-  // list forever, both slowing the game down and (at low camera angles) showing as track stretching
-  // back further than it should.
+  // How much track exists around the rider: LOOK_AHEAD in front (enough for the pulled-back camera),
+  // KEEP_BEHIND behind. Everything outside is freed, so a long run never piles up geometry or collision
+  // data, and everything inside is (re)built, so there is never a hole in the track anywhere the rider can
+  // be or see.
+  const LOOK_AHEAD = 400;
   const KEEP_BEHIND = 200;
+  let frontierZ = zStart; // north end of the built track
 
-  /** Frees the meshes and collision data of segments the rider has left well behind. Returns the solids
-   * that were removed, since the caller mixes waveTrack.solids into its own collision list. */
-  const pruneBehind = (playerZ, keepBehind = KEEP_BEHIND) => {
-    const removedSolids = [];
-    while (segments.length > 1 && segments[0].zBottom > playerZ + keepBehind) {
-      const segment = segments.shift();
-      group.remove(segment.meshGroup);
-      segment.meshGroup.traverse((object) => {
-        if (object.isMesh) {
-          object.geometry.dispose();
-          if (!sharedMaterials.has(object.material)) object.material.dispose();
-        } else if (object.isSprite) {
-          // Sprite geometry is a single instance three.js shares across every sprite in the app: never dispose it.
-          const map = object.material.map;
-          if (map && map !== returnTexture && map !== vipTexture) map.dispose();
-          object.material.dispose();
-        }
-      });
-      removeFrom(solids, segment.solid);
-      removeFrom(pits, segment.pit);
-      for (const surface of segment.surfaces) removeFrom(surfaces, surface);
-      for (const reward of segment.rewards) removeFrom(rewards, reward);
-      removedSolids.push(segment.solid);
+  /** Brings the built segments in line with the rider's position. Returns what changed, since the caller
+   * mixes the solids and surfaces into its own collision lists. */
+  const update = (playerZ) => {
+    // Segment i is wanted while it overlaps [playerZ - LOOK_AHEAD, playerZ + KEEP_BEHIND].
+    let first = 0;
+    while (segmentStart(first + 1) > playerZ + KEEP_BEHIND) first += 1;
+    let last = first;
+    while (segmentStart(last + 1) > playerZ - LOOK_AHEAD) last += 1;
+
+    const changes = { addedSolids: [], removedSolids: [], addedSurfaces: [], removedSurfaces: [] };
+    for (const i of [...built.keys()]) {
+      if (i >= first && i <= last) continue;
+      const segment = disposeSegment(i);
+      changes.removedSolids.push(segment.solid);
+      changes.removedSurfaces.push(...segment.surfaces);
     }
-    return removedSolids;
+    for (let i = first; i <= last; i += 1) {
+      if (built.has(i)) continue;
+      buildSegment(i);
+      const segment = built.get(i);
+      changes.addedSolids.push(segment.solid);
+      changes.addedSurfaces.push(...segment.surfaces);
+    }
+    frontierZ = segmentStart(last + 1);
+    return changes;
   };
+  update(0);
 
   // A warning stretches the red across the whole run instead of just the entrance.
   const setWarning = (active) => {
-    redUniforms.uRedLength.value = active ? (zStart - z) * 2 : RED_FADE_LENGTH;
+    redUniforms.uRedLength.value = active ? (zStart - frontierZ) * 2 : RED_FADE_LENGTH;
   };
 
   const rewardAt = (position) => rewards.find((reward) => (
@@ -466,11 +513,13 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
     if (!reward) return false;
     reward.claimed = true;
     reward.rewardArt.visible = false;
+    claimedRewards.add(id);
     return true;
   };
 
   /** Brings a collected trophy back so it can be collected again; called once the rider's back home. */
   const restoreReward = (id) => {
+    claimedRewards.delete(id);
     const reward = rewards.find((item) => item.id === id);
     if (!reward) return;
     reward.claimed = false;
@@ -485,7 +534,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
 
   return {
     group, solids, pits, surfaces, rewards, rewardAt, collectReward, restoreReward, setRiderLevel,
-    setWarning, ensureAhead, pruneBehind,
-    get zEnd() { return z; },
+    setWarning, update,
+    get zEnd() { return frontierZ; },
   };
 }

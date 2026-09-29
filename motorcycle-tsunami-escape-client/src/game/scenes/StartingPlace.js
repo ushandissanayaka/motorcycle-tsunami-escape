@@ -23,6 +23,7 @@ import { createWorld2BikeDisplay } from '../entities/World2BikeDisplay.js';
 
 const { room: ROOM, corridor: CORRIDOR } = MAP_LAYOUT;
 const STAGE_FRONT_Z = 20.5;
+const ASTRALWING_POSITION = { x: -11.8, z: -22.1 };
 
 // --- layout (world units; the room spans x -50..38, z -38..31) -------------
 // Measured from the reference's top-down view: the road is wide, with a grey paved strip either side of it
@@ -125,7 +126,8 @@ export function buildStartingPlace(scene, renderer) {
   gate.group.rotation.y = WORLD_GATE_POSITION.yaw;
   scene.add(gate.group);
   const world2Bike = createWorld2BikeDisplay();
-  world2Bike.group.position.set(-8.5, 0, -32.3);
+  // Keep the Astralwing directly opposite the Aetherune across the black centre road.
+  world2Bike.group.position.set(ASTRALWING_POSITION.x, 0, ASTRALWING_POSITION.z);
   scene.add(world2Bike.group);
   // The wave place fills the corridor to the north.
   const waveTrack = createWaveTrack({ x0: -CORRIDOR.halfWidth, x1: CORRIDOR.halfWidth, zStart: ROOM.north, ...WAVE_TRACK });
@@ -190,8 +192,8 @@ export function buildStartingPlace(scene, renderer) {
     boostPads.forEach((board) => board.userData.update(time));
     store.update(time, player, onStorePad);
     display.update(time);
-    const ringX = (player.position.x + 8.5) / 6.4;
-    const ringZ = (player.position.z + 32.3) / 3.2;
+    const ringX = (player.position.x - ASTRALWING_POSITION.x) / 4.5;
+    const ringZ = (player.position.z - ASTRALWING_POSITION.z) / 4.5;
     const insideRing = ringX * ringX + ringZ * ringZ < 1;
     if (insideRing && !insideAstralwingRing) onAstralwingRing?.();
     insideAstralwingRing = insideRing;

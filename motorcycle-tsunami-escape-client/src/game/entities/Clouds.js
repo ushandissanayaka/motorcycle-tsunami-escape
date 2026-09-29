@@ -9,8 +9,12 @@ import { MAP_LAYOUT } from '../../shared/constants.js';
  * map itself.
  */
 
-const COUNT = 90;
-const FIELD = 800; // the field repeats every FIELD units in x and z, centred on the camera
+// Halved from an earlier pass (was 90 clouds over an 800-unit field): each sprite is cheap on its own, but 90
+// overlapping transparent sprites add up in overdraw. The field shrinks with it, by the same factor, so the
+// clouds stay just as dense around the camera — the far background is the sky dome's own painted cloud floor,
+// not these sprites, so there is no visible gap at distance.
+const COUNT = 45;
+const FIELD = 560; // the field repeats every FIELD units in x and z, centred on the camera
 const FADE = { from: FIELD * 0.3, to: FIELD * 0.47 }; // fade out toward the wrap edge so clouds never pop
 const SHADE = '#b7d5f1';
 const MID = '#dcecf9';

@@ -11,20 +11,21 @@ import { SEA_HORIZON_COLOR } from './Sky.js';
  * Waves arrive at random: sometimes one at a time, sometimes two or three in quick succession, and a faster
  * wave sent behind a slower one can catch up and pass it.
  *
- * The water is drawn with shaders: animated caustic ripples, the type's colours from crest to foamy base,
- * and a cloud of spray around it.
+ * The water is drawn with shaders: dense slanted wavelets with bright glints over the type's colours from crest
+ * to foamy base, and a cloud of spray around it. Slower kinds are lower. A wave is a closed body (thick at the
+ * foot, thin at the crest, closed underneath), casts the sun's shadow and darkens the road in front of it.
  */
 
 /**
  * The wave kinds. Colours are display colours taken from the reference art: `crest`, `body` and `base` colour the
  * water from top to bottom; `text` and `outline` colour the name tag. `speed` is units per second,
- * `weight` how often a kind is picked.
+ * `weight` how often a kind is picked, `height` its size relative to the fastest kind.
  */
 export const WAVE_TYPES = {
-  verySlow: { name: 'VERY SLOW', emoji: '\u{1F603}', speed: 9, weight: 16, crest: '#45c4b6', body: '#57e4c4', base: '#8af7d2', text: '#57ffae', outline: '#3d6086' },
-  slow: { name: 'SLOW', emoji: '\u{1F642}', speed: 15, weight: 28, crest: '#3f92ec', body: '#41a0f4', base: '#7fccff', text: '#a7f4ff', outline: '#3d6086' },
-  medium: { name: 'MEDIUM', emoji: '\u{1F624}', speed: 24, weight: 28, crest: '#3d75f1', body: '#4381f9', base: '#699aff', text: '#91d0ff', outline: '#3b5c83' },
-  fast: { name: 'FAST', emoji: '\u{1F621}', speed: 38, weight: 30, crest: '#f75d89', body: '#ff6693', base: '#ff7292', text: '#ff678c', outline: '#3d6086' },
+  verySlow: { name: 'VERY SLOW', emoji: '\u{1F603}', speed: 9, weight: 16, height: 0.72, crest: '#45c4b6', body: '#57e4c4', base: '#8af7d2', text: '#57ffae', outline: '#3d6086' },
+  slow: { name: 'SLOW', emoji: '\u{1F642}', speed: 15, weight: 28, height: 0.8, crest: '#3f92ec', body: '#41a0f4', base: '#7fccff', text: '#a7f4ff', outline: '#3d6086' },
+  medium: { name: 'MEDIUM', emoji: '\u{1F624}', speed: 24, weight: 28, height: 0.9, crest: '#3d75f1', body: '#4381f9', base: '#699aff', text: '#91d0ff', outline: '#3b5c83' },
+  fast: { name: 'FAST', emoji: '\u{1F621}', speed: 38, weight: 30, height: 1, crest: '#f75d89', body: '#ff6693', base: '#ff7292', text: '#ff678c', outline: '#3d6086' },
 };
 const TAG_STROKE = '#f7fdff'; // white inner outline of every name tag
 
@@ -54,6 +55,32 @@ float noise(vec2 p) {
 }
 `;
 
+const RIPPLES = /* glsl */ `
+// Stylised water surface like the reference: dense wavelets slanted across the surface, each crest catching a
+// thin white glint along its top edge with a darker trough under it. Needs CAUSTIC's noise().
+float wavelet(vec2 p) {
+  return 1.0 - abs(2.0 * noise(p) - 1.0); // ridged: sharp crests, soft troughs
+}
+float rippleHeight(vec2 p) {
+  p += (vec2(noise(p * 0.55), noise(p * 0.55 + 17.0)) - 0.5) * 2.2; // bend the rows so they interlock
+  return wavelet(p * vec2(1.4, 2.6)) * 0.65 + wavelet(p * vec2(2.6, 4.2) + 3.7) * 0.35;
+}
+// x: 0..1 height of the surface (trough..crest), y: 0..1 glint.
+vec2 ripples(vec2 uv, float time) {
+  const mat2 slant = mat2(0.94, 0.34, -0.34, 0.94);
+  vec2 p = slant * uv + vec2(time * 0.12, time * 0.5);
+  float h = rippleHeight(p);
+  float slope = (rippleHeight(p + vec2(0.0, 0.03)) - h) / 0.03;
+  return vec2(h, smoothstep(1.2, 2.6, -slope) * smoothstep(0.4, 0.75, h));
+}
+// Lays the ripple pattern over a display colour, whatever the water's colour is.
+vec3 applyRipples(vec3 col, vec2 uv, float time) {
+  vec2 r = ripples(uv, time);
+  col *= mix(0.82, 1.06, r.x);
+  return mix(col, vec3(1.0), r.y * 0.75);
+}
+`;
+
 // How far the crest leans over toward the riders at height fraction v.
 const CURL = /* glsl */ `
 float curl(float v, float h, float k) {
@@ -65,16 +92,16 @@ const WAVE_VERTEX = /* glsl */ `
 uniform float uTime;
 uniform float uHeight;
 uniform float uCurl;
-uniform float uCap; // 0 = the wave body, -1 / +1 = the closed left / right end
+uniform float uCap; // 0 = the wave body, -1 / +1 = the closed left / right end, 2 = the underside
 uniform float uWidth;
 varying vec3 vWorld;
 varying float vV;
 varying float vBack;
 varying float vThick;
 ${CURL}
-// Thick at the base, thinning steadily to a slim crest.
+// Thick at the foot, thinning to a sharp crest where the front and back skins meet (keep in sync with hitsPlayer).
 float thickness(float v, float h) {
-  return h * 0.42 * pow(1.0 - v, 1.7) + 0.35 + h * 0.03;
+  return (h * 0.62 * (1.0 - v) + 0.3 + h * 0.02) * (1.0 - v);
 }
 void main() {
   float v;
@@ -85,6 +112,11 @@ void main() {
     // uv.y runs front skin base -> crest (0..0.5), then back skin crest -> base (0.5..1).
     back = step(0.5, uv.y);
     v = back > 0.5 ? 2.0 - 2.0 * uv.y : 2.0 * uv.y;
+    x = position.x;
+  } else if (uCap == 2.0) {
+    // The underside: a flat floor from the front skin's foot to the back skin's foot.
+    v = 0.0;
+    t = uv.y;
     x = position.x;
   } else {
     v = uv.y;
@@ -111,25 +143,52 @@ uniform float uHeight;
 uniform vec3 uCrest;
 uniform vec3 uBody;
 uniform vec3 uBase;
+uniform float uCap;
 varying vec3 vWorld;
 varying float vV;
 varying float vBack;
 varying float vThick;
 ${CAUSTIC}
+${RIPPLES}
 void main() {
   float y = vV * uHeight;
-  // Water streams down the face while the ripple pattern drifts.
-  vec2 q = vec2(vWorld.x * 0.07, y * 0.07 + uTime * 0.06);
-  float c = min(caustic(q, uTime * 0.5) + 0.6 * caustic(q * 1.8 + 3.1, uTime * 0.42), 1.0);
-
   // The type's own colours (display values): light and foamy at the base, saturated body, deeper crest.
   vec3 col = mix(uBase, uBody, smoothstep(0.0, 0.32, vV));
   col = mix(col, uCrest, smoothstep(0.55, 1.0, vV));
-  col += (vec3(1.0) - col) * c * 0.1;
+
+  // Wavelets stream down the face (and across the ends and underside), whatever the colour.
+  vec2 face = uCap == 0.0 ? vec2(vWorld.x, y) : uCap == 2.0 ? vWorld.xz : vec2(vWorld.z, y);
+  col = applyRipples(col, face * 0.8, uTime);
 
   // The far side and the thick inside of the wave sit a little darker, so the face toward the riders keeps its exact colour.
   col *= 1.0 - 0.2 * vBack - 0.1 * smoothstep(0.0, 14.0, vThick) * vBack;
   gl_FragColor = vec4(pow(col, vec3(2.2)), 1.0); // display -> linear; the post chain re-encodes
+}
+`;
+
+// Shadow-map depth for the wave, drawn with the same displaced shape as the water.
+const WAVE_DEPTH_FRAGMENT = /* glsl */ `
+#include <packing>
+void main() {
+  gl_FragColor = packDepthToRGBA(gl_FragCoord.z);
+}
+`;
+
+// Soft shade on the road in front of the wave, under the crest leaning over it. uv.y: 1 at the wave's foot.
+const FRONT_SHADOW_VERTEX = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const FRONT_SHADOW_FRAGMENT = /* glsl */ `
+uniform float uStrength;
+varying vec2 vUv;
+void main() {
+  float a = uStrength * pow(vUv.y, 1.6) * smoothstep(0.0, 0.08, vUv.x) * (1.0 - smoothstep(0.92, 1.0, vUv.x));
+  gl_FragColor = vec4(0.01, 0.03, 0.1, a);
 }
 `;
 
@@ -192,6 +251,8 @@ const TAG_SIZE = { width: 512, height: 400 };
 const TAG_WORLD_WIDTH = 26; // world units wide; height follows the canvas aspect
 const TAG_FADE = { none: 190, full: 110 }; // distance from the rider: invisible beyond `none`, fully shown within `full`
 const TAG_STACK_RANGE = 40; // waves closer together than this (along the corridor) stack their tags
+const TAG_LIFT = 10; // how far a tag floats above its wave's crest
+const FRONT_SHADOW_Y = 0.12; // just above the road surface
 const TAG_STACK_STEP = (TAG_WORLD_WIDTH * TAG_SIZE.height) / TAG_SIZE.width + 1; // one tag's height plus a little space
 const TAG_FONT = "'Lilita One', 'Luckiest Guy', 'Arial Black', Impact, sans-serif";
 
@@ -324,6 +385,10 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
   const waveGeometry = new THREE.PlaneGeometry(width, 1, 120, 120); // uv.y: front skin base->crest, then back skin crest->base
   const capGeometry = new THREE.PlaneGeometry(1, 1, 8, 60);
   capGeometry.translate(0.5, 0.5, 0); // uv.x = across the thickness, uv.y = height fraction
+  const bottomGeometry = new THREE.PlaneGeometry(width, 1, 60, 1); // uv.y = front foot -> back foot
+  const frontShadowGeometry = new THREE.PlaneGeometry(width, 1);
+  frontShadowGeometry.rotateX(-Math.PI / 2); // flat, uv.y = 1 at the -z edge
+  frontShadowGeometry.translate(0, 0, 0.5); // from the wave's foot (z = 0) forward to z = 1
   const sprayCount = 420;
   const seeds = new Float32Array(sprayCount * 3);
   for (let i = 0; i < seeds.length; i += 1) seeds[i] = Math.random();
@@ -338,10 +403,21 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
       uTime: { value: 0 }, uHeight: { value: startHeight }, uWidth: { value: width }, uCurl: { value: 1 }, uCap: { value: 0 },
       uCrest: { value: new THREE.Color() }, uBody: { value: new THREE.Color() }, uBase: { value: new THREE.Color() },
     };
-    const material = (values) => new THREE.ShaderMaterial({ vertexShader: WAVE_VERTEX, fragmentShader: WAVE_FRAGMENT, uniforms: values, side: THREE.DoubleSide });
-    const body = new THREE.Mesh(waveGeometry, material(uniforms));
-    // Closed ends so the wave reads as a solid body of water from any angle.
-    const caps = [-1, 1].map((side) => new THREE.Mesh(capGeometry, material({ ...uniforms, uCap: { value: side } })));
+    // Each part casts the sun's shadow with its displaced shape, not the flat geometry's.
+    const part = (geometry, values) => {
+      const mesh = new THREE.Mesh(geometry, new THREE.ShaderMaterial({ vertexShader: WAVE_VERTEX, fragmentShader: WAVE_FRAGMENT, uniforms: values, side: THREE.DoubleSide }));
+      mesh.customDepthMaterial = new THREE.ShaderMaterial({ vertexShader: WAVE_VERTEX, fragmentShader: WAVE_DEPTH_FRAGMENT, uniforms: values, side: THREE.DoubleSide });
+      mesh.castShadow = true;
+      return mesh;
+    };
+    const body = part(waveGeometry, uniforms);
+    // Closed ends and underside so the wave reads as a solid body of water from any angle, even from down in a pit.
+    const caps = [-1, 1].map((side) => part(capGeometry, { ...uniforms, uCap: { value: side } }));
+    const bottom = part(bottomGeometry, { ...uniforms, uCap: { value: 2 } });
+    const frontShadow = new THREE.Mesh(frontShadowGeometry, new THREE.ShaderMaterial({
+      vertexShader: FRONT_SHADOW_VERTEX, fragmentShader: FRONT_SHADOW_FRAGMENT, uniforms: { uStrength: { value: 0 } }, transparent: true, depthWrite: false,
+    }));
+    frontShadow.position.y = FRONT_SHADOW_Y;
     const spray = new THREE.Points(
       sprayGeometry,
       new THREE.ShaderMaterial({ vertexShader: SPRAY_VERTEX, fragmentShader: SPRAY_FRAGMENT, uniforms, transparent: true, depthWrite: false })
@@ -350,11 +426,11 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
     tag.scale.set(TAG_WORLD_WIDTH, (TAG_WORLD_WIDTH * TAG_SIZE.height) / TAG_SIZE.width, 1);
     tag.renderOrder = 10;
     const root = new THREE.Group();
-    for (const mesh of [body, ...caps, spray]) mesh.frustumCulled = false;
-    root.add(body, ...caps, spray, tag);
+    for (const mesh of [body, ...caps, bottom, spray]) mesh.frustumCulled = false;
+    root.add(body, ...caps, bottom, frontShadow, spray, tag);
     root.visible = false;
     group.add(root);
-    return { root, uniforms, tag, active: false };
+    return { root, uniforms, tag, frontShadow, active: false };
   };
   const pool = Array.from({ length: MAX_WAVES }, makeWave);
 
@@ -367,7 +443,7 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
     const type = WAVE_TYPES[id];
     const spawnZ = Math.min(zFar, riderZ - SPAWN_AHEAD);
     slot.active = true;
-    Object.assign(slot, { id, type, speed: type.speed, z: spawnZ, prevZ: spawnZ, height: startHeight, sizeScale: randomBetween(0.9, 1.1), spawnOrder: state.cycle, phase: 'run', breakProgress: 0, caught: false, travelled: 0 });
+    Object.assign(slot, { id, type, speed: type.speed, z: spawnZ, prevZ: spawnZ, height: startHeight, sizeScale: type.height * randomBetween(0.96, 1.04), spawnOrder: state.cycle, phase: 'run', breakProgress: 0, caught: false, travelled: 0 });
     setDisplayColor(slot.uniforms.uCrest.value, type.crest);
     setDisplayColor(slot.uniforms.uBody.value, type.body);
     setDisplayColor(slot.uniforms.uBase.value, type.base);
@@ -438,13 +514,16 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
       }
       wave.root.position.z = wave.z;
       wave.uniforms.uHeight.value = Math.max(wave.height, 0.01);
+      // The shade reaches about as far as the crest leans over, and fades as the wave crashes.
+      wave.frontShadow.scale.z = wave.height * 0.9 + 3;
+      wave.frontShadow.material.uniforms.uStrength.value = 0.5 * THREE.MathUtils.smoothstep(wave.height, 1, 8);
 
       // The colour shows from anywhere; the name tag only fades in as the rider gets close.
       const near = 1 - THREE.MathUtils.smoothstep(Math.abs(wave.z - riderZ), TAG_FADE.full, TAG_FADE.none);
       wave.tag.material.opacity = wave.phase === 'run' ? near : near * (1 - Math.min(wave.breakProgress * 2, 1));
       // Tags of waves that are close together (about to pass one another) are stacked so they stay readable.
       const stacked = state.waves.filter((other) => other !== wave && Math.abs(other.z - wave.z) < TAG_STACK_RANGE && other.spawnOrder < wave.spawnOrder).length;
-      wave.tag.position.set(0, Math.max(wave.height, startHeight) + 7 + stacked * TAG_STACK_STEP, 0);
+      wave.tag.position.set(0, Math.max(wave.height, startHeight) + TAG_LIFT + stacked * TAG_STACK_STEP, 0);
     }
   };
 
@@ -468,7 +547,7 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
     const sheltered = collision?.pitAt(x, z) && y + riderHeight < 0;
     for (const wave of state.waves) {
       if (wave.caught) continue;
-      const thickness = wave.height * 0.45 + 0.35;
+      const thickness = wave.height * 0.64 + 0.3; // the foot's thickness in the wave shader
       // Use the whole distance the wave moved this frame, so a fast wave cannot skip over a rider.
       const reachedFront = Math.max(wave.prevZ, wave.z) >= z - 0.5;
       const beforeBack = Math.min(wave.prevZ, wave.z) <= z + thickness;

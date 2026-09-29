@@ -185,7 +185,7 @@ vec3 skyColor(vec3 d) {
   col = mix(col, bankCol, bank);
 
   // Below the horizon: the far sea.
-  col = mix(col, vec3(${SEA_HORIZON_COLOR.join(', ')}), smoothstep(0.0, -0.02, h));
+  col = mix(col, vec3(${SEA_HORIZON_COLOR.join(', ')}), (1.0 - smoothstep(-0.02, 0.0, h)));
   return col;
 }
 `;

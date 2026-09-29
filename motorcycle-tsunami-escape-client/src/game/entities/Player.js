@@ -7,6 +7,8 @@ import { createBlockyHuman } from './BlockyHuman.js';
 
 // Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
 const VISUAL_SCALE = 1.2;
+// Road meshes sit 0.1 units above the physics ground; lift the visual so the tires rest on top.
+const VISUAL_GROUND_OFFSET = 0.1;
 const RIDER_SEAT = new THREE.Vector3(0, 1.16, 0.2); // hips on the starter scooter's seat, sneakers on the floorboard
 // Shoulder pitch that puts the hands on the scooter's grips, which sit at shoulder height.
 const SCOOTER_ARM_ANGLE = 1.58;
@@ -123,6 +125,7 @@ export function createPlayer() {
   const group = new THREE.Group();
   const visual = new THREE.Group();
   visual.scale.setScalar(VISUAL_SCALE);
+  visual.position.y = VISUAL_GROUND_OFFSET;
   group.add(visual);
 
   let bikeId = 'bike_scooter';
@@ -145,7 +148,7 @@ export function createPlayer() {
   // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.
   group.userData.setLean = (angle) => { visual.rotation.z = angle; };
   // Holds the visible bike a little below / above the physics position while it eases onto a ledge.
-  group.userData.setVisualOffset = (y) => { visual.position.y = y; };
+  group.userData.setVisualOffset = (y) => { visual.position.y = VISUAL_GROUND_OFFSET + y; };
   group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>
     bike.userData.spinWheels?.(distance, deltaSeconds, trainingMultiplier);
 

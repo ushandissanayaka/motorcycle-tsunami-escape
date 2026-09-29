@@ -327,7 +327,9 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
     // pit walls, curbs run along its sides and a dashed line down its centre.
     box(width, columnHeight, length, asphalt, centerX, columnY, midZ);
     sideWalls(z, zBack, wallFoot, wallTops, rockGeoms, capGeoms);
-    const solid = { minX: x0, maxX: x1, minZ: zBack, maxZ: z, bottom: floorTop, top: 0 };
+    // The rideable bike model is wider/longer than its point collision position. Expand only the
+    // falling-side blocker so the bike cannot visibly nose into the black slab's vertical face.
+    const solid = { minX: x0, maxX: x1, minZ: zBack, maxZ: z, bottom: floorTop, top: 0, collisionMargin: 1.35 };
     solids.push(solid);
     for (const side of [-1, 1]) {
       box(CURB_WIDTH, 0.06, length, curb, centerX + side * (width / 2 - CURB_WIDTH / 2), slabTop + 0.03, midZ);

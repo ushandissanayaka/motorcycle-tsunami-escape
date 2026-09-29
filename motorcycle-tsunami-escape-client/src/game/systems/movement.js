@@ -11,13 +11,29 @@ const GRAVITY = 16; // units/sec^2
 // TAP_FACE toward their direction (S from facing forward spins the bike round on the spot). Holding a key
 // past HOLD_MS turns the bike the rest of the way to that direction and drives it there for as long as
 // the key is held; a key whose direction the bike already faces (within FACING) drives straight away.
-// Turns run at TURN_SPEED: a tap is done within a frame, a full about-turn in under a tenth of a second.
+// Each turn is a quick sweep rather than a snap: the bike swings into it at up to TURN_ACCEL, cruises at
+// no more than MAX_TURN_RATE and brakes just in time to land exactly on the new heading, with no
+// overshoot and no slow creep at the end. Like a real bike, it turns as fast as it drives: both limits
+// scale with the bike's drive speed (moveSpeed, which grows with collected Speed, level and Custom
+// Speed) relative to TURN_REFERENCE_SPEED, up to TURN_SCALE_MAX, past which an about-turn would take
+// only a frame or two and read as a jump. It leans into the turn as a real bike does, by
+// tan(lean) = speed * turn rate / LEAN_GRAVITY, so a faster bike leans further in the same turn.
 const DEG = Math.PI / 180;
 const TAP_TURN = 20 * DEG;
 const TAP_FACE = 120 * DEG;
 const FACING = 25 * DEG;
-const HOLD_MS = 150; // a press shorter than this is a tap
-const TURN_SPEED = 40; // radians/sec
+const HOLD_MS = 120; // a press shorter than this is a tap
+const TURN_ACCEL = 500; // radians/sec^2, at TURN_REFERENCE_SPEED
+const MAX_TURN_RATE = 30; // radians/sec, at TURN_REFERENCE_SPEED
+const TURN_REFERENCE_SPEED = 12; // drive speed (units/sec) the two limits above are for
+const TURN_SCALE_MIN = 0.5;
+const TURN_SCALE_MAX = 3;
+const TURN_FINISH = 0.5 * DEG; // the last sliver of a turn is taken in one step
+const LEAN_GRAVITY = 800; // sets how far a given speed * turn rate leans the bike
+const MAX_LEAN = 32 * DEG;
+const STANDING_LEAN = 0.5; // a spin on the spot leans less than a turn at speed
+const LEAN_IN = 30; // how fast the bike tips into a lean, per second (times the turn scale)
+const LEAN_OUT = 7; // how fast it straightens up again, per second: more gently, so a quick flick still shows
 const KEY_DIRECTION = { w: 0, a: Math.PI / 2, s: Math.PI, d: -Math.PI / 2 }; // heading offset from the camera's
 const KEY_CODES = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd' };
 
@@ -111,10 +127,34 @@ function steer(target, keys, deltaSeconds, cameraYaw) {
     }
   }
 
-  const step = TURN_SPEED * deltaSeconds;
-  const turn = Math.abs(data.turnRemaining) <= step ? data.turnRemaining : Math.sign(data.turnRemaining) * step;
+  // "Arrive" steering: the fastest turn rate from which the bike can still brake to a stop exactly at the
+  // new heading, reached no faster than TURN_ACCEL allows.
+  data.turnVelocity ??= 0;
+  const speed = data.moveSpeed || MOVE_SPEED;
+  const scale = THREE.MathUtils.clamp(speed / TURN_REFERENCE_SPEED, TURN_SCALE_MIN, TURN_SCALE_MAX);
+  const accel = TURN_ACCEL * scale;
+  const remaining = Math.abs(data.turnRemaining);
+  const wanted = Math.sign(data.turnRemaining) * Math.min(MAX_TURN_RATE * scale, Math.sqrt(2 * accel * remaining));
+  const change = accel * deltaSeconds;
+  data.turnVelocity += THREE.MathUtils.clamp(wanted - data.turnVelocity, -change, change);
+  let turn = data.turnVelocity * deltaSeconds;
+  if (Math.sign(turn) === Math.sign(data.turnRemaining) && Math.abs(turn) >= Math.abs(data.turnRemaining)) turn = data.turnRemaining;
   target.rotation.y += turn;
   data.turnRemaining -= turn;
+  if (Math.abs(data.turnRemaining) < TURN_FINISH) {
+    target.rotation.y += data.turnRemaining;
+    data.turnRemaining = 0;
+    data.turnVelocity = 0;
+  }
+
+  // Lean into the turn (positive rotation.y turns left, and a positive roll tips the bike to its left).
+  const leanSpeed = speed * (driving ? 1 : STANDING_LEAN);
+  const leanGoal = THREE.MathUtils.clamp(Math.atan((leanSpeed * data.turnVelocity) / LEAN_GRAVITY), -MAX_LEAN, MAX_LEAN);
+  data.lean ??= 0;
+  const leaningIn = Math.abs(leanGoal) > Math.abs(data.lean) && Math.sign(leanGoal) !== -Math.sign(data.lean);
+  const leanRate = leaningIn ? LEAN_IN * scale : LEAN_OUT;
+  data.lean += (leanGoal - data.lean) * Math.min(1, leanRate * deltaSeconds);
+  data.setLean?.(data.lean);
   return driving;
 }
 

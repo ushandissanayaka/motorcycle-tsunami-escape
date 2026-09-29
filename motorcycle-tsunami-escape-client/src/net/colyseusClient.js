@@ -4,7 +4,13 @@ function getServerUrl() {
   const configured = import.meta.env.VITE_SERVER_WS_URL?.trim();
   const securePage = window.location.protocol === 'https:';
   if (!configured) {
-    return `${securePage ? 'wss' : 'ws'}://${window.location.hostname}:2567`;
+    const localHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+    if (localHosts.has(window.location.hostname)) {
+      return `${securePage ? 'wss' : 'ws'}://${window.location.hostname}:2567`;
+    }
+
+    // Render exposes the service through its public hostname on 443, not port 2567.
+    return 'wss://motorcycle-tsunami-escape.onrender.com';
   }
 
   const url = new URL(configured);

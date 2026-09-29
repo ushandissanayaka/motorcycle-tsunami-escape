@@ -23,6 +23,7 @@ import inventoryArt from '../assets/hud/inventory.png';
 import trollArt from '../assets/hud/troll.png';
 import levelBarArt from '../assets/hud/level_bar.png';
 import levelBarEmptyArt from '../assets/hud/level_bar_empty.png';
+import aetheruneBikeArt from '../assets/popups/inventory_bike.png';
 import pack100kArt from '../assets/hud/pack100k.png';
 import pack1mArt from '../assets/hud/pack1m.png';
 import pack10mArt from '../assets/hud/pack10m.png';
@@ -72,7 +73,7 @@ function StaticArt({ src, box }) {
 
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
-  speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
+  speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, aetherunePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
 }) {
   const [menuPopup, setMenuPopup] = useState('daily'); // greet the player with Daily Rewards on load
   const [shopPurchase, setShopPurchase] = useState(null);
@@ -119,7 +120,7 @@ export default function StartingPlaceHUD({
     setShowWavePurchase(true);
   });
 
-  const bigOffer = bikePurchaseOpen || (shopPurchase?.price ?? 0) > 500;
+  const bigOffer = bikePurchaseOpen || aetherunePurchaseOpen || (shopPurchase?.price ?? 0) > 500;
   const currentLevelTarget = levelTarget(level);
   const barFill = speed === 0 ? 0 : (levelProgress / currentLevelTarget) * 100;
 
@@ -166,7 +167,7 @@ export default function StartingPlaceHUD({
       <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={toggleMenu('wheel')} />
       <Art src={wavesArt} box={BOX.waves} label={wavesDisabled ? 'Enable waves' : 'Disable waves'} onClick={toggleWaves} className={wavesDisabled ? 'is-off' : ''} />
 
-      {(showWavePurchase || bikePurchaseOpen || premiumBoardPurchase || shopPurchase) && (
+      {(showWavePurchase || bikePurchaseOpen || aetherunePurchaseOpen || premiumBoardPurchase || shopPurchase) && (
         <div className="purchase-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePurchase(); }}>
           <svg className="purchase-spinner" viewBox="0 0 100 100" role="img" aria-label="Loading">
             <circle className="purchase-spinner-track" cx="50" cy="50" r="45" />
@@ -180,6 +181,7 @@ export default function StartingPlaceHUD({
             </header>
             <div className="purchase-item">
               {shopPurchase ? <img src={shopPurchase.img} alt="" />
+                : aetherunePurchaseOpen ? <img src={aetheruneBikeArt} alt="" />
                 : bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
                 : premiumBoardPurchase ? (
                   <svg className="purchase-treadmill-icon" viewBox="0 0 80 68" aria-hidden="true">
@@ -188,7 +190,7 @@ export default function StartingPlaceHUD({
                     <path d="M27 21h10v6H27z" fill={premiumBoardPurchase === '25x' ? '#bf62ff' : premiumBoardPurchase === '3x' ? '#ffc21a' : '#438dff'} />
                   </svg>
                 ) : <img src={wavesArt} alt="" />}
-              <div><strong>{shopPurchase ? shopPurchase.name : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {shopPurchase ? shopPurchase.price : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
+              <div><strong>{shopPurchase ? shopPurchase.name : aetherunePurchaseOpen ? 'Aetherune Bike' : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {shopPurchase ? shopPurchase.price : aetherunePurchaseOpen ? '699' : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
             </div>
             <div className="robux-offer"><span><b>⬡</b> {bigOffer ? '1,000' : '500'} <del><b>⬡</b> {bigOffer ? '800' : '400'}</del></span><strong>{bigOffer ? '$9.99' : '$4.99'}</strong></div>
             <button className="purchase-buy" onClick={() => showMessage('Purchases are not available yet.')}>Buy</button>

@@ -58,6 +58,7 @@ function profile(points, width, material, { bevel = 0.06, x = 0 } = {}) {
 /** Wheel with its axle along X, centred at the origin. `disc` gives a solid Tron-style disc. */
 function wheel({ r, width = 0.16, tire = BLACK, rim = METAL, glow = null, spokes = 0, knobby = false, disc = null }) {
   const g = new THREE.Group();
+  g.userData.wheelRadius = r; // lets a ridden copy roll its wheels (see createStoreBike)
   const tireGeometry = new THREE.TorusGeometry(r - width / 2, width / 2, 10, 32);
   tireGeometry.rotateY(Math.PI / 2);
   g.add(mesh(tireGeometry, mat(tire, { roughness: 0.85, metalness: 0.05 })));
@@ -172,6 +173,7 @@ function sport({ main, dark, accent, rim = 0x2b2b35, glowRims = null, emissive =
       bike.add(spike);
     }
   }
+  bike.userData.rideFit = { hips: [1.39, 0.3], bars: [1.3, -0.5] };
   return bike;
 }
 
@@ -193,6 +195,7 @@ function tron({ shell, mid, glow, emissive = 0.25 }) {
   }
   bike.add(ellipsoid(0.1, 0.06, 0.04, glowMat(0xffffff, 2), 0, 0.82, -1.4));
   bike.add(box(0.62, 0.04, 0.04, midMat, 0, 1.12, -0.36));
+  bike.userData.rideFit = { hips: [1.16, 0.15], bars: [1.12, -0.36] };
   return bike;
 }
 
@@ -229,6 +232,7 @@ function classic({ main, seat = 0x1a1414, chrome = 0xd4d7e0 }) {
   bike.add(ellipsoid(0.12, 0.12, 0.03, glowMat(0xfff4d0, 1.8), 0, 1.12, -0.9));
   bike.add(box(0.84, 0.045, 0.045, chromeMat, 0, 1.38, -0.55));
   for (const s of [-1, 1]) bike.add(strut([s * 0.1, 1.26, -0.6], [s * 0.3, 1.38, -0.55], 0.025, chromeMat));
+  bike.userData.rideFit = { hips: [1.34, 0.4], bars: [1.38, -0.55] };
   return bike;
 }
 
@@ -256,6 +260,7 @@ function dirt({ plastic, frame, accent }) {
   bike.add(box(0.3, 0.38, 0.46, metal, 0, 0.62, 0.0)); // engine
   bike.add(strut([0.18, 0.5, 0.0], [0.2, 1.0, 1.05], 0.055, metal)); // exhaust
   bike.add(box(0.86, 0.05, 0.05, darkMat, 0, 1.52, -0.5));
+  bike.userData.rideFit = { hips: [1.5, 0.3], bars: [1.52, -0.5] };
   return bike;
 }
 
@@ -279,6 +284,7 @@ function chopper({ body: bodyColor, neon }) {
   bike.add(box(0.78, 0.05, 0.05, metal, 0, 1.46, -0.42));
   bike.add(ellipsoid(0.1, 0.1, 0.08, glowMat(0xffffff, 1.6), 0, 1.12, -0.65));
   bike.add(box(0.5, 0.025, 0.025, neonMat, 0, 1.2, -0.3));
+  bike.userData.rideFit = { hips: [1.15, 0.45], bars: [1.46, -0.42] };
   return bike;
 }
 
@@ -344,8 +350,30 @@ const SPECS = {
   bike_bloodmoon_3: () => sport({ main: 0xff4a50, dark: 0x5a1a22, accent: 0xffc0c8, glowRims: 0xff6a6a, emissive: 0.75, wings: 0xd9d9e2 }),
 };
 
+// Where a rider sits on the procedural light cycle (bike_azure), in the same terms as the rideFit above.
+const LIGHT_CYCLE_FIT = { hips: [1.16, 0.2], bars: [1.26, -0.36] };
+
+/**
+ * The model of a store bike. The same model is what a rider rides once they take it, so every model says
+ * where the rider sits (`userData.rideFit`: hips just above the seat and the handlebar grips, as [y, z]
+ * with the front toward -Z) and can roll its wheels (`userData.spinWheels`).
+ */
 export function createStoreBike(id) {
   const build = SPECS[id];
   if (!build) throw new Error(`No store model for bike "${id}"`);
-  return build();
+  const bike = build();
+  if (id === 'bike_azure') bike.userData.rideFit = LIGHT_CYCLE_FIT;
+  if (!bike.userData.spinWheels) {
+    const wheels = [];
+    bike.traverse((object) => { if (object.userData.wheelRadius) wheels.push(object); });
+    bike.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier = 0) => {
+      // Roll with the road; on a training board, spin in place faster on higher multipliers.
+      for (const w of wheels) {
+        w.rotation.x -= trainingMultiplier > 0
+          ? deltaSeconds * Math.min(18 + trainingMultiplier * 2, 120)
+          : distance / w.userData.wheelRadius;
+      }
+    };
+  }
+  return bike;
 }

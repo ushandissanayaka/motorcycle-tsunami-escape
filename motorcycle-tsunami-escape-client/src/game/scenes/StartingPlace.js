@@ -142,8 +142,9 @@ export function buildStartingPlace(scene, renderer) {
   const tsunami = createTsunami({
     width: CORRIDOR.halfWidth * 2 + 10,
     zFar: CORRIDOR.north - 300,
-    // Waves finish dissolving right at the starting line (where the track's red is deepest), never reaching the starting place.
-    zNear: ROOM.north + 2,
+    // Waves finish dissolving a few units out past the starting line, so even a crest curling forward as it
+    // crashes stays clear of the starting place.
+    zNear: ROOM.north - 5,
   });
   scene.add(tsunami.group);
 
@@ -235,6 +236,12 @@ function addLighting(scene) {
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -62, right: 62, top: 62, bottom: -62, near: 5, far: 260 });
   sun.shadow.bias = -0.0004;
+  // The sun's view axes (it looks along -SUN_OFFSET with world up), and one shadow texel in world units.
+  const viewZ = SUN_OFFSET.clone().normalize();
+  const viewX = new THREE.Vector3(0, 1, 0).cross(viewZ).normalize();
+  const SHADOW_AXES = { x: viewX, y: viewZ.clone().cross(viewX) };
+  const SHADOW_TEXEL = (sun.shadow.camera.right - sun.shadow.camera.left) / sun.shadow.mapSize.x;
+  const snapped = new THREE.Vector3();
   sun.shadow.normalBias = 0.05;
   scene.add(sun, sun.target);
 
@@ -251,8 +258,15 @@ function addLighting(scene) {
   return {
     /** Keeps the sun's shadow window centred on the rider. */
     followRider(position) {
-      sun.target.position.copy(position);
-      sun.position.copy(position).add(SUN_OFFSET);
+      // Move the shadow window only in whole shadow-map texels (measured across the sun's view), so the
+      // shadows on the ground keep their exact pixels instead of crawling and shimmering as the rider moves.
+      const across = position.dot(SHADOW_AXES.x);
+      const up = position.dot(SHADOW_AXES.y);
+      snapped.copy(position)
+        .addScaledVector(SHADOW_AXES.x, Math.round(across / SHADOW_TEXEL) * SHADOW_TEXEL - across)
+        .addScaledVector(SHADOW_AXES.y, Math.round(up / SHADOW_TEXEL) * SHADOW_TEXEL - up);
+      sun.target.position.copy(snapped);
+      sun.position.copy(snapped).add(SUN_OFFSET);
       sun.target.updateMatrixWorld();
     },
   };

@@ -211,7 +211,7 @@ export default function App() {
         world.waveTrack.restoreReward(pendingReturn.rewardId);
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
-        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
         world.player.userData.grounded = true;
         world.player.userData.jumpVelocity = 0;
         pendingReturn = null;
@@ -225,7 +225,7 @@ export default function App() {
       } else {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
-        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
         clearKeys();
       }
       const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
@@ -287,7 +287,7 @@ export default function App() {
         speedPopupAccum = 0;
         lastSpeedPopupTime = nowSeconds;
       }
-      updateChaseCamera(camera, world.player);
+      updateChaseCamera(camera, world.player, delta);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera, () => {
         camera.userData.focusPoint = new THREE.Vector3(-8.5, 4, -32.3);
         camera.userData.zoomTarget = 0.4;
@@ -300,7 +300,7 @@ export default function App() {
       if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
-        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
         world.player.userData.grounded = true;
         world.player.userData.jumpVelocity = 0;
         setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
@@ -401,6 +401,7 @@ export default function App() {
     }
     setProfile((previous) => ({ ...previous, selectedBike: bike.id }));
     setNotice({ id: Date.now(), text: `${bike.name} equipped!` });
+    worldRef.current?.store.takeBike(bike.id); // the display bike leaves its stand, and a new one takes its place
   };
 
   // Pads glow green (equipped), yellow (unlocked) or red (locked).

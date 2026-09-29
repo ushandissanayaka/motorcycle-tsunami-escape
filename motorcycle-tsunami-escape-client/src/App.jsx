@@ -132,12 +132,7 @@ export default function App() {
     let respawnFreezeUntil = 0;
     let pendingReturn = null; // { at, rewardId }: a returned trophy's burst is playing; teleport home at `at`
     const clearKeys = () => {
-      keys.w = false;
-      keys.a = false;
-      keys.s = false;
-      keys.d = false;
-      keys.space = false;
-      keys.turn = 0;
+      keys.clear();
       camera.userData.steer = 0;
     };
     let speedPopupAccum = 0;
@@ -240,8 +235,7 @@ export default function App() {
       speedGainRemainder += lockedPremiumBoard ? 0 : trainingPad ? trainingRate * delta : movedDistance;
       speedGainRemainder += bonusSpeedRef.current; // wheelspin / daily reward prizes
       bonusSpeedRef.current = 0;
-      const wheelDistance = keys.s && !keys.w ? -movedDistance : movedDistance;
-      world.player.userData.spinWheels?.(trainingPad ? 0 : wheelDistance, delta, trainingMultiplier);
+      world.player.userData.spinWheels?.(trainingPad ? 0 : movedDistance, delta, trainingMultiplier);
 
       const trainingState = lockedPremiumBoard ? `locked-${overlappingPad.multiplier}x` : trainingPad;
       if (trainingState !== lastTrainingPad) {

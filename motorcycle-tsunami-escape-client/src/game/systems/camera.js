@@ -17,7 +17,8 @@ const PITCH_MAX = 1.45; // almost straight down
 export function createChaseCamera(aspect) {
   const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 2000);
   // zoom / world-space yaw / pitch ease toward their targets. Camera yaw is independent of rider heading,
-  // so turning the bike does not swing the camera around it. `steer` collects right-drag turning.
+  // so turning the bike does not swing the camera around it; W / A / S / D steer relative to it (see
+  // systems/movement.js). `steer` collects right-drag turning.
   camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0, steer: 0 };
   return camera;
 }
@@ -27,9 +28,9 @@ const clampZoom = (value) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, value));
 /**
  * Camera controls, all removed by the returned function:
  * - zoom: mouse wheel, touchpad two-finger scroll / pinch, touchscreen pinch, + / - keys
- * - steer + rotate: hold the right mouse button (or touchpad right click) and drag, or one-finger drag on a
- *   touchscreen. Sideways turns the rider and the camera together while driving, so W / S go where you
- *   look, and orbits the view around the rider while standing still; up / down tilts the view.
+ * - rotate: hold the right mouse button (or touchpad right click) and drag, or one-finger drag on a
+ *   touchscreen. Sideways orbits the view around the rider (held W / A / S / D follow the new view, so the
+ *   bike goes where you look); up / down tilts the view.
  * - look around the rider: Q / E; R resets the view
  */
 export function attachCameraControls(camera) {

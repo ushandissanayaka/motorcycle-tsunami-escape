@@ -327,10 +327,42 @@ export function createBikeStore({ position, bikes = BIKES }) {
     }
   };
 
+  // Taking a bike: the display model lifts off its stand and shrinks away (TAKE.leave), the stand stays
+  // empty for a moment (TAKE.empty), then a fresh one pops back in (TAKE.restock), so every rider can take
+  // one; the store never runs out.
+  const TAKE = { leave: 0.3, empty: 0.9, restock: 0.45 };
+  let lastTime = 0;
+  /** Plays the take-and-restock animation on the stand of `bikeId`. */
+  const takeBike = (bikeId) => {
+    const entry = entries.find((item) => item.bike.id === bikeId);
+    if (entry) entry.takenAt = lastTime;
+  };
+  // 0..1 with a small overshoot at the end, for the restocked bike's pop.
+  const easeOutBack = (t) => 1 + 2.2 * (t - 1) ** 3 + 1.2 * (t - 1) ** 2;
+
   const update = (time, player, onPad) => {
+    lastTime = time;
     for (const entry of entries) {
       const bob = Math.sin(time * 1.6 + entry.phase);
-      entry.holder.position.y = entry.floorY + BIKE_HEIGHT[entry.bike.tier] + bob * 0.22;
+      let lift = 0;
+      let size = 1;
+      if (entry.takenAt !== undefined) {
+        const t = time - entry.takenAt;
+        if (t < TAKE.leave) {
+          const k = t / TAKE.leave;
+          lift = k * k * 1.2;
+          size = 1 - k * k;
+        } else if (t < TAKE.leave + TAKE.empty) {
+          size = 0;
+        } else if (t < TAKE.leave + TAKE.empty + TAKE.restock) {
+          size = Math.max(0, easeOutBack((t - TAKE.leave - TAKE.empty) / TAKE.restock));
+        } else {
+          delete entry.takenAt;
+        }
+      }
+      entry.holder.visible = size > 0.001;
+      entry.holder.scale.setScalar(entry.slot.scale * Math.max(size, 0.001));
+      entry.holder.position.y = entry.floorY + BIKE_HEIGHT[entry.bike.tier] + bob * 0.22 + lift;
       entry.holder.rotation.z = Math.sin(time * 1.1 + entry.phase) * 0.04;
     }
     if (!player) return;
@@ -349,5 +381,5 @@ export function createBikeStore({ position, bikes = BIKES }) {
     }
   };
 
-  return { group, solids, setStates, update };
+  return { group, solids, setStates, update, takeBike };
 }

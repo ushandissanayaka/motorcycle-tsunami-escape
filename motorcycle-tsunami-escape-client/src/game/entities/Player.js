@@ -2,14 +2,21 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import scooterUrl from '../../assets/green-delivery-scooter.glb?url';
 import { createBike } from './Bike.js';
+import { createStoreBike } from './StoreBikes.js';
 import { createBlockyHuman } from './BlockyHuman.js';
 
 // Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
 const VISUAL_SCALE = 1.2;
-const RIDER_SEAT = new THREE.Vector3(0, 1.16, 0.2); // hips on the seat, sneakers on the floorboard
-// Shoulder pitch that puts the hands on the handlebar grips. The scooter's grips sit at shoulder
-// height, so its arms reach straight forward; the procedural bike's bars are lower.
-const ARM_ANGLE = { scooter: 1.58, bike: 1.1 };
+const RIDER_SEAT = new THREE.Vector3(0, 1.16, 0.2); // hips on the starter scooter's seat, sneakers on the floorboard
+// Shoulder pitch that puts the hands on the scooter's grips, which sit at shoulder height.
+const SCOOTER_ARM_ANGLE = 1.58;
+// The rider's shoulders are 0.5 up the torso (BlockyHuman), and an arm reaches ARM_REACH from the shoulder
+// to the middle of the hand. The torso leans forward (from UPRIGHT up to MAX_LEAN) just enough for the hands
+// to reach a bike's bars: upright on a cruiser, a racing crouch on a sport bike.
+const SHOULDER_UP = 0.5;
+const ARM_REACH = 0.58;
+const UPRIGHT = 0.12;
+const MAX_LEAN = 0.95;
 
 let scooterModelPromise;
 
@@ -70,8 +77,45 @@ function createStarterScooter() {
   return bike;
 }
 
+/** The equipped bike: the very model shown in the bike store (see StoreBikes.js), so a rider rides what they took. */
 function createBikeModel(bikeId) {
-  return bikeId === 'bike_scooter' ? createStarterScooter() : createBike();
+  if (bikeId === 'bike_scooter') return createStarterScooter();
+  try {
+    return createStoreBike(bikeId);
+  } catch {
+    const bike = createBike(); // a bike with no store model yet
+    bike.userData.rideFit = { hips: [1.16, 0.2], bars: [1.26, -0.36] };
+    return bike;
+  }
+}
+
+/** Sits the rider on the bike: hips just above its seat, the torso leaned in just enough, and the arms
+ * pitched so the hands meet its handlebars. */
+function seatRider(rider, bike) {
+  const torso = rider.userData.arms[0].parent;
+  const fit = bike.userData.rideFit;
+  if (!fit) {
+    rider.position.copy(RIDER_SEAT);
+    torso.rotation.x = -UPRIGHT;
+    for (const arm of rider.userData.arms) arm.rotation.x = SCOOTER_ARM_ANGLE;
+    return;
+  }
+  const [hipY, hipZ] = fit.hips;
+  const [barY, barZ] = fit.bars;
+  rider.position.set(0, hipY, hipZ);
+  const shoulderAt = (lean) => [hipY + SHOULDER_UP * Math.cos(lean), hipZ - SHOULDER_UP * Math.sin(lean)];
+  const reachFrom = (lean) => {
+    const [y, z] = shoulderAt(lean);
+    return Math.hypot(barY - y, barZ - z);
+  };
+  // The least lean that brings the bars within reach (or the closest the rider can get).
+  let lean = UPRIGHT;
+  while (lean < MAX_LEAN && reachFrom(lean) > ARM_REACH) lean += 0.01;
+  torso.rotation.x = -lean;
+  // The pitch that points an arm (hanging straight down, -Y) at the bars, measured from the leaning torso.
+  const [shoulderY, shoulderZ] = shoulderAt(lean);
+  const pitch = Math.atan2(-(barZ - shoulderZ), -(barY - shoulderY));
+  for (const arm of rider.userData.arms) arm.rotation.x = pitch + lean;
 }
 
 /** Blocky rider on the currently equipped bike. The starter scooter is loaded from its textured GLB. */
@@ -86,13 +130,8 @@ export function createPlayer() {
   visual.add(bike);
 
   const rider = createBlockyHuman();
-  rider.position.copy(RIDER_SEAT);
   visual.add(rider);
-  const poseArms = () => {
-    const angle = bikeId === 'bike_scooter' ? ARM_ANGLE.scooter : ARM_ANGLE.bike;
-    for (const arm of rider.userData.arms) arm.rotation.x = angle;
-  };
-  poseArms();
+  seatRider(rider, bike);
 
   group.userData.setBikeModel = (nextBikeId) => {
     if (!nextBikeId || nextBikeId === bikeId) return;
@@ -100,7 +139,7 @@ export function createPlayer() {
     bikeId = nextBikeId;
     bike = createBikeModel(bikeId);
     visual.add(bike);
-    poseArms();
+    seatRider(rider, bike);
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
   // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.

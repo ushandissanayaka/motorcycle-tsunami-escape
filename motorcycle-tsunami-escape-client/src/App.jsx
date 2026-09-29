@@ -401,6 +401,7 @@ export default function App() {
     }
     setProfile((previous) => ({ ...previous, selectedBike: bike.id }));
     setNotice({ id: Date.now(), text: `${bike.name} equipped!` });
+    worldRef.current?.store.takeBike(bike.id); // the display bike leaves its stand, and a new one takes its place
   };
 
   // Pads glow green (equipped), yellow (unlocked) or red (locked).

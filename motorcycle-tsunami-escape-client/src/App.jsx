@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
+// First, so it counts every download the scene setup starts.
+import { whenAssetsLoaded } from './game/util/assetsReady.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -15,6 +17,7 @@ import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLe
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
+import { hideLoadingScreen } from './ui/loadingScreen.js';
 
 const SAVE_KEY = 'mte-starting-place';
 const SESSION_PROGRESS_KEY = 'mte-session-progress';
@@ -325,8 +328,20 @@ export default function App() {
       sizeBloom();
     };
     window.addEventListener('resize', resize);
-    loadingEnd();
-    gameplayStart();
+
+    // The loading screen (index.html) stays up until the bike models and textures have arrived, the web
+    // fonts are in and the first frames are on screen, so the player never sees a half-built scene; then
+    // it fades straight into the game. A stuck download can't hold the game back for more than 20 s.
+    const firstFrames = new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const shownBriefly = new Promise((resolve) => setTimeout(resolve, 900)); // no flash on a fast load
+    const ready = Promise.all([whenAssetsLoaded(), document.fonts?.ready, firstFrames, shownBriefly]);
+    const giveUp = new Promise((resolve) => setTimeout(resolve, 20000));
+    Promise.race([ready, giveUp]).then(() => {
+      if (!active) return;
+      loadingEnd();
+      gameplayStart();
+      hideLoadingScreen();
+    });
 
     return () => {
       active = false;

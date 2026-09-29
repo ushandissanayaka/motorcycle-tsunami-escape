@@ -11,7 +11,7 @@ import { attachCameraControls, createChaseCamera, updateChaseCamera } from './ga
 import { createInputState, updateMovement } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
-import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget } from './shared/constants.js';
+import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress } from './shared/constants.js';
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
@@ -78,7 +78,10 @@ export default function App() {
     const camera = createChaseCamera(window.innerWidth / window.innerHeight);
     cameraRef.current = camera;
     const detachCameraControls = attachCameraControls(camera);
-    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: true });
+    // No MSAA on the canvas: the scene is drawn into the composer's own render target (which has none),
+    // and the canvas only receives the finished full-screen image, where MSAA changes no pixel but still
+    // costs a multisampled framebuffer and a resolve every frame.
+    const renderer = new THREE.WebGLRenderer({ canvas: canvasRef.current, antialias: false });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
@@ -89,8 +92,15 @@ export default function App() {
     composer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     composer.setSize(window.innerWidth, window.innerHeight);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.7, 1.0));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.7, 1.0);
+    composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
+    // Bloom is a soft blur, so it doesn't need full resolution to look right; composer.setSize above (and
+    // again below on window resize) hands every pass, this one included, the full render size, so its own
+    // internal blur chain is downsized again right after, each time, to a quarter of the pixels for that
+    // one pass, cutting a real per-frame cost that runs unconditionally regardless of scene content.
+    const sizeBloom = () => bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
+    sizeBloom();
 
     const world = buildStartingPlace(scene, renderer);
     world.waveTrack.setRiderLevel(profileRef.current.level);
@@ -107,6 +117,17 @@ export default function App() {
     let speedProgress = profileRef.current.speed;
     let levelProgress = profileRef.current.levelProgress;
     let riderLevel = profileRef.current.level;
+    // Speed and level change on almost every frame while driving. Handing each change to React would
+    // re-render the whole HUD (and re-save the profile) 60 times a second, so the loop keeps the live
+    // values itself and passes them on at most HUD_SYNC_MS apart; a level-up goes through at once.
+    const HUD_SYNC_MS = 100;
+    let hudDirty = false;
+    let lastHudSync = 0;
+    const syncHud = (now) => {
+      hudDirty = false;
+      lastHudSync = now;
+      setProfile((current) => ({ ...current, speed: speedProgress, level: riderLevel, levelProgress }));
+    };
     let lastTrainingPad = null;
     let respawnFreezeUntil = 0;
     let pendingReturn = null; // { at, rewardId }: a returned trophy's burst is playing; teleport home at `at`
@@ -247,21 +268,20 @@ export default function App() {
         speedGainRemainder -= earnedSpeed;
         speedProgress += earnedSpeed;
         speedPopupAccum += earnedSpeed;
-        // Each level needs more than the last (see levelTarget), so a big jump (a speed pack) can
-        // clear several at once; the leftover carries into the new level's own, bigger bar.
-        let levelTotal = levelProgress + earnedSpeed;
-        let levelsGained = 0;
-        while (levelTotal >= levelTarget(riderLevel + levelsGained)) {
-          levelTotal -= levelTarget(riderLevel + levelsGained);
-          levelsGained += 1;
-        }
+        // Each level needs more than the last (see levelTarget), so a big jump (a speed pack, or a big
+        // debug/testing grant) can clear many at once; the leftover carries into the new level's own,
+        // bigger bar. Solved in closed form (see applyLevelProgress) rather than one level at a time,
+        // since a huge enough grant could otherwise ask for millions of loop iterations in a single frame.
+        const { levelsGained, levelProgress: newLevelProgress } = applyLevelProgress(levelProgress, earnedSpeed, riderLevel);
         riderLevel += levelsGained;
-        levelProgress = levelTotal;
-        setProfile((current) => ({ ...current, speed: speedProgress, level: riderLevel, levelProgress }));
+        levelProgress = newLevelProgress;
+        hudDirty = true;
         if (levelsGained > 0) {
+          syncHud(now);
           setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });
         }
       }
+      if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
       const nowSeconds = now / 1000;
       if (speedPopupAccum > 0 && nowSeconds - lastSpeedPopupTime > SPEED_POPUP_INTERVAL) {
         world.speedPopups.spawn(world.player.position, speedPopupAccum, nowSeconds, world.player.rotation.y);
@@ -305,6 +325,7 @@ export default function App() {
       camera.updateProjectionMatrix();
       renderer.setSize(window.innerWidth, window.innerHeight);
       composer.setSize(window.innerWidth, window.innerHeight);
+      sizeBloom();
     };
     window.addEventListener('resize', resize);
     loadingEnd();
@@ -376,7 +397,7 @@ export default function App() {
       if (bike.id === profile.selectedBike) return 'equipped';
       return isBikeUnlocked(bike, profile) ? 'unlocked' : 'locked';
     });
-  }, [profile]);
+  }, [profile.selectedBike, profile.wins, profile.finishes]);
 
   // Red wave-track trophies open at level 100; the track shows "Return" on the ones this level can collect.
   useEffect(() => {

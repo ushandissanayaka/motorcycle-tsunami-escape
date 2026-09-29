@@ -7,6 +7,25 @@ export function levelTarget(level) {
 }
 
 /**
+ * How many levels `levelProgress + earnedSpeed` clears from `riderLevel`, and what's left over in the
+ * new level's own (bigger) bar. Levels needed for a jump of `n` grow with n², so a single very large
+ * grant (a speed pack, a long AFK stretch, a big debug/testing bonus) could ask the equivalent of a
+ * one-level-at-a-time loop for millions of iterations — this solves the same arithmetic-series sum in
+ * closed form instead, so the cost stays flat no matter how big the jump is. `levelTarget` is a plain
+ * arithmetic sequence (LEVEL_BASE + 50 per level up), so the levels-gained count is the positive root of
+ * a quadratic; a small integer correction afterwards guards against floating-point rounding at the edge.
+ */
+export function applyLevelProgress(levelProgress, earnedSpeed, riderLevel) {
+  const total = levelProgress + earnedSpeed;
+  const b = levelTarget(riderLevel) - 25; // from expanding the sum below: sum_{k=0}^{n-1} levelTarget(riderLevel+k) = b*n + 25n²
+  const sumOf = (n) => n * b + 25 * n * n; // sum_{k=0}^{n-1} levelTarget(riderLevel + k)
+  let levelsGained = Math.max(0, Math.floor((-b + Math.sqrt(b * b + 100 * total)) / 50));
+  while (levelsGained > 0 && sumOf(levelsGained) > total) levelsGained -= 1;
+  while (sumOf(levelsGained + 1) <= total) levelsGained += 1;
+  return { levelsGained, levelProgress: total - sumOf(levelsGained) };
+}
+
+/**
  * The wave place: black slabs level with the road, separated by deep grey pits.
  * Every pit is `gapGrowth` longer than the one before it, so the jumps get harder,
  * and every slab is `slabGrowth` longer than the one before it, so the pits get

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mulberry32 } from '../util/textures.js';
 import { signSprite } from './Sign.js';
+import { batchStatic } from '../util/staticBatch.js';
 
 /**
  * The gate to another world, shaped and coloured after the reference screenshots: a ring of cracked purple stone
@@ -472,6 +473,10 @@ export function createWorldGate({ title = 'WORLD 2', subtitle = 'Level 75 Requir
   const subtitleSprite = signSprite(subtitle, { fontSize: 1.0, color: yellowGreen, strokeColor: '#08260d', strokeEm: 0.22, width: 13, height: 2.2 });
   subtitleSprite.position.set(0, 9.6, 0.5);
   group.add(titleSprite, subtitleSprite);
+
+  // The stone arch and the trees never move: one draw call per look (the portal and its dust animate
+  // through their own shaders and stay separate).
+  batchStatic(group);
 
   const update = (time) => {
     portalMaterial.uniforms.uTime.value = time;

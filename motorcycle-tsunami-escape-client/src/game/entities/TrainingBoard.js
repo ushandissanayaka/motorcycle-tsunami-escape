@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { batchStatic } from '../util/staticBatch.js';
 
 /** Deck footprint: rides in along X from the road side, monitor at the +X end. */
 export const BOARD = { length: 8.2, width: 3.4, height: 1 };
@@ -521,5 +522,8 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
     ],
     update,
   };
+  // The deck, ramp, rails and monitor never move: one draw call per look. The animated glow, streaks,
+  // bolts and sparkles stay separate.
+  batchStatic(group, { exclude: [glow, ...streaks, sparkles] });
   return group;
 }

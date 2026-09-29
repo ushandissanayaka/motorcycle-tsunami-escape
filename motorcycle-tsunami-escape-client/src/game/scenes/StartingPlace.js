@@ -136,7 +136,6 @@ export function buildStartingPlace(scene, renderer) {
     waveTrack.pits,
     [...trainingSurfaces, ...waveTrack.surfaces]
   );
-  let knownWaveSolids = waveTrack.solids.length;
   let insidePremiumBoard = null;
 
   // The tsunami rolls in from far beyond the open end of the corridor.
@@ -174,19 +173,18 @@ export function buildStartingPlace(scene, renderer) {
 
   /** Per-frame animation; `onStorePad(bike)` fires when the rider drives onto a store pad. */
   const update = (time, onStorePad, camera, onAstralwingRing, onPremiumBoard) => {
-    waveTrack.ensureAhead(player.position.z);
-    if (waveTrack.solids.length > knownWaveSolids) {
-      collision.solids.push(...waveTrack.solids.slice(knownWaveSolids));
-      knownWaveSolids = waveTrack.solids.length;
-    }
-    // Frees track the rider has left well behind (see WaveTrack.js), so a long run doesn't keep every
-    // slab and pit ever generated alive forever; collision.solids is its own array (built once from
-    // several sources), so pruned solids are removed from it here by reference, not by re-slicing.
-    for (const solid of waveTrack.pruneBehind(player.position.z)) {
-      const index = collision.solids.indexOf(solid);
-      if (index !== -1) collision.solids.splice(index, 1);
-    }
-    knownWaveSolids = waveTrack.solids.length;
+    // Keeps track built around the rider, in front and behind (see WaveTrack.js). collision.solids and
+    // collision.surfaces are their own arrays (built once from several sources), so the track's changes are
+    // mirrored into them here by reference.
+    const trackChanges = waveTrack.update(player.position.z);
+    const removeFrom = (list, item) => {
+      const index = list.indexOf(item);
+      if (index !== -1) list.splice(index, 1);
+    };
+    for (const solid of trackChanges.removedSolids) removeFrom(collision.solids, solid);
+    for (const surface of trackChanges.removedSurfaces) removeFrom(collision.surfaces, surface);
+    collision.solids.push(...trackChanges.addedSolids);
+    collision.surfaces.push(...trackChanges.addedSurfaces);
     boostPads.forEach((board) => board.userData.update(time));
     store.update(time, player, onStorePad);
     display.update(time);
@@ -231,7 +229,10 @@ function addLighting(scene) {
   const sun = new THREE.DirectionalLight(0xfff0d0, 2.1);
   sun.position.copy(SUN_OFFSET);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(4096, 4096);
+  // The sun follows the rider every frame (see followRider below), so this shadow map is redrawn from
+  // scratch every frame, not once: its resolution is a direct, ongoing cost, not just a one-time load
+  // cost. 2048 still looks sharp with PCFSoftShadowMap's blur softening the edges anyway.
+  sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -62, right: 62, top: 62, bottom: -62, near: 5, far: 260 });
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.05;

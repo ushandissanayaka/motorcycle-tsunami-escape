@@ -103,6 +103,8 @@ export function createPlayer() {
     poseArms();
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
+  // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.
+  group.userData.setLean = (angle) => { visual.rotation.z = angle; };
   group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>
     bike.userData.spinWheels?.(distance, deltaSeconds, trainingMultiplier);
 

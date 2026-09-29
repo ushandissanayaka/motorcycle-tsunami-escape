@@ -208,6 +208,7 @@ export default function App() {
         world.waveTrack.restoreReward(pendingReturn.rewardId);
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
         world.player.userData.grounded = true;
         world.player.userData.jumpVelocity = 0;
         pendingReturn = null;
@@ -221,6 +222,7 @@ export default function App() {
       } else {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
         clearKeys();
       }
       const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
@@ -295,6 +297,7 @@ export default function App() {
       if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
         world.player.position.set(0, 0, 0);
         world.player.rotation.set(0, 0, 0);
+        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0 });
         world.player.userData.grounded = true;
         world.player.userData.jumpVelocity = 0;
         setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });

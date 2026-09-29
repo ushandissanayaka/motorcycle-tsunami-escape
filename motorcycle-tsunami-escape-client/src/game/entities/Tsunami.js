@@ -1,8 +1,7 @@
 import * as THREE from 'three';
-import { SEA_HORIZON_COLOR } from './Sky.js';
 
 /**
- * The tsunamis. A sea fills the open end of the corridor, and waves rise out of the distance and roll south
+ * The tsunamis. Waves rise out of the distance beyond the open end of the corridor and roll south
  * down the wave place toward the start, growing taller as they approach. Their crests curl toward the riders.
  * When a wave reaches the mouth of the corridor it breaks and dissolves in spray.
  *
@@ -29,23 +28,7 @@ export const WAVE_TYPES = {
 };
 const TAG_STROKE = '#f7fdff'; // white inner outline of every name tag
 
-const CAUSTIC = /* glsl */ `
-#define TAU 6.28318530718
-// Tileable water caustic (after Dave_Hoskins): bright, drifting cell lines like light through water.
-float caustic(vec2 uv, float time) {
-  vec2 p = mod(uv * TAU, TAU) - 250.0;
-  vec2 i = p;
-  float c = 1.0;
-  float inten = 0.005;
-  for (int n = 0; n < 5; n++) {
-    float t = time * (1.0 - (3.5 / float(n + 1)));
-    i = p + vec2(cos(t - i.x) + sin(t + i.y), sin(t - i.y) + cos(t + i.x));
-    c += 1.0 / length(vec2(p.x / (sin(i.x + t) / inten), p.y / (cos(i.y + t) / inten)));
-  }
-  c /= 5.0;
-  c = 1.17 - pow(c, 1.4);
-  return pow(abs(c), 8.0);
-}
+const NOISE = /* glsl */ `
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
   vec2 i = floor(p);
@@ -57,7 +40,7 @@ float noise(vec2 p) {
 
 const RIPPLES = /* glsl */ `
 // Stylised water surface like the reference: dense wavelets slanted across the surface, each crest catching a
-// thin white glint along its top edge with a darker trough under it. Needs CAUSTIC's noise().
+// thin white glint along its top edge with a darker trough under it. Needs NOISE.
 float wavelet(vec2 p) {
   return 1.0 - abs(2.0 * noise(p) - 1.0); // ridged: sharp crests, soft troughs
 }
@@ -148,7 +131,7 @@ varying vec3 vWorld;
 varying float vV;
 varying float vBack;
 varying float vThick;
-${CAUSTIC}
+${NOISE}
 ${RIPPLES}
 void main() {
   float y = vV * uHeight;
@@ -220,30 +203,6 @@ void main() {
   float d = length(gl_PointCoord - 0.5) * 2.0;
   float a = (1.0 - smoothstep(0.2, 1.0, d)) * vAlpha;
   gl_FragColor = vec4(pow(vec3(0.95, 0.99, 1.0), vec3(2.2)), a);
-}
-`;
-
-const SEA_VERTEX = /* glsl */ `
-varying vec3 vWorld;
-void main() {
-  vec4 world = modelMatrix * vec4(position, 1.0);
-  vWorld = world.xyz;
-  gl_Position = projectionMatrix * viewMatrix * world;
-}
-`;
-
-const SEA_FRAGMENT = /* glsl */ `
-uniform float uTime;
-varying vec3 vWorld;
-${CAUSTIC}
-void main() {
-  float dist = distance(vWorld.xz, cameraPosition.xz);
-  vec3 nearColor = vec3(0.08, 0.42, 0.9);
-  vec3 farColor = vec3(${SEA_HORIZON_COLOR.join(', ')}); // meets the sky's sea horizon
-  vec3 col = mix(nearColor, farColor, smoothstep(40.0, 600.0, dist));
-  float ripples = caustic(vWorld.xz * 0.04, uTime * 0.35);
-  col += vec3(0.6, 0.86, 1.0) * ripples * 0.3 * (1.0 - smoothstep(20.0, 350.0, dist));
-  gl_FragColor = vec4(pow(col, vec3(2.2)), 1.0);
 }
 `;
 
@@ -364,23 +323,13 @@ const OVERTAKE_CHANCE = 0.75; // how often a faster wave sent behind a slower on
 const OVERTAKE_AT = [110, 400]; // distance from the start of their run at which an overtake is timed to happen
 const MAX_OVERTAKE_DELAY = 30; // seconds
 const MAX_WAVES = 5; // waves in the water at once
-const SPAWN_AHEAD = 320; // a wave appears this far ahead of a rider who has gone past the sea's start
+const SPAWN_AHEAD = 320; // a wave appears this far ahead of a rider who has gone past zFar
 const FULL_HEIGHT_DISTANCE = 480; // a wave has swollen to full size after rolling this far
 const BREAK_DURATION = 1.8; // seconds a wave takes to crash and dissolve once it starts breaking
 const BREAK_CREEP = 0.35; // fraction of run speed a wave still creeps forward while breaking
 
-export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRange = [7, 16], startHeight = 4, endHeight = 20 }) {
+export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], startHeight = 4, endHeight = 20 }) {
   const group = new THREE.Group();
-
-  // The sea surrounds the whole map: land and canyon walls stand above it, and it is only visible outside the walls
-  // and past the open end of the corridor (the ground is above it everywhere else).
-  const sea = new THREE.Mesh(
-    new THREE.PlaneGeometry(8000, 14000),
-    new THREE.ShaderMaterial({ vertexShader: SEA_VERTEX, fragmentShader: SEA_FRAGMENT, uniforms: { uTime: { value: 0 } } })
-  );
-  sea.rotation.x = -Math.PI / 2;
-  sea.position.set(0, seaLevel, -3000);
-  group.add(sea);
 
   const waveGeometry = new THREE.PlaneGeometry(width, 1, 120, 120); // uv.y: front skin base->crest, then back skin crest->base
   const capGeometry = new THREE.PlaneGeometry(1, 1, 8, 60);
@@ -466,7 +415,6 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
   const update = (time, riderZ = 0) => {
     const dt = scheduler.lastTime === null ? 0 : THREE.MathUtils.clamp(time - scheduler.lastTime, 0, 0.1);
     scheduler.lastTime = time;
-    sea.material.uniforms.uTime.value = time;
 
     if (!state.enabled) return;
 
@@ -527,7 +475,7 @@ export function createTsunami({ width = 46, zFar, zNear, seaLevel = -0.4, waitRa
     }
   };
 
-  /** Waves can be switched off (the "Disable Waves" button); the sea stays. */
+  /** Waves can be switched off (the "Disable Waves" button). */
   const setEnabled = (enabled) => {
     state.enabled = enabled;
     if (!enabled) {

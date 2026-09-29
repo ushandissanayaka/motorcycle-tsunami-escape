@@ -222,7 +222,7 @@ export function createWaveTrack({ x0, x1, zStart, slabs, slabLength, slabGrowth,
   const floorTop = SURFACE - pitDepth;
   const columnHeight = pitDepth + SURFACE; // from the pit floor up to the slab surface
   const columnY = (SURFACE - pitDepth) / 2;
-  const wallFoot = floorTop - 1.2; // side walls reach down into the sea beside the track
+  const wallFoot = floorTop - 1.2; // side walls reach down below the track
 
   const redUniforms = { uRedFrom: { value: zStart + 2 }, uRedLength: { value: RED_FADE_LENGTH } };
   const asphalt = withEntranceRed(new THREE.MeshStandardMaterial({ map: makeStudTexture(PALETTES.asphalt, 61), roughness: 0.9 }), redUniforms);

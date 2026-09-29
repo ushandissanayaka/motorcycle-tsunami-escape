@@ -52,7 +52,7 @@ function makeSolid({ width, height, depth, taper = 1, position, yaw = 0, tint })
  */
 function addMesa({ center, width, depth, height, yaw, rand, rock, grass }) {
   const taper = 0.9 + rand() * 0.1;
-  const bottom = -10; // the cliffs stand in the sea around the map
+  const bottom = -10; // the cliffs hang down into the clouds around the map
   const totalHeight = height - bottom;
 
   rock.push(
@@ -178,7 +178,7 @@ export function createCanyonWall({ layout = MAP_LAYOUT, seed = 7 } = {}) {
           width = 8;
           last = true;
         }
-        const depth = edge.lowProfile ? 16 + rand() * 8 : 10 + rand() * 8; // the corridor's cliffs are broad, with the sea beyond them
+        const depth = edge.lowProfile ? 16 + rand() * 8 : 10 + rand() * 8; // the corridor's cliffs are broad, with the sky beyond them
         // The corridor's walls stay low enough to keep the sky in view, but step up and down: a short front row and a taller row behind it.
         const height = edge.lowProfile
           ? (layer.offset === 0 ? 6 + rand() * 7 : 11 + rand() * 8)

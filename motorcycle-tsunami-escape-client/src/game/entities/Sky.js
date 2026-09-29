@@ -4,7 +4,8 @@ import * as THREE from 'three';
  * Anime-style daytime skybox: deep royal blue overhead shading to vivid cyan at the horizon, a ring of
  * towering cel-shaded cumulus on the horizon (white tops, flat pale-blue undersides, plumes that lean as
  * they rise), big sweeping clouds with translucent fringes and thin white swooshes overhead, a small bright
- * sun and a pale moon.
+ * sun and a pale moon. Below the horizon lies a sea of clouds with open sky showing through the gaps, since the
+ * map floats in the sky.
  *
  * The painting is far too costly to run per pixel every frame, so it is baked once into a cube map and the
  * dome that follows the camera just looks it up. Colours are written as display values (8-bit keeps the
@@ -13,9 +14,6 @@ import * as THREE from 'three';
  */
 
 const CUBE_SIZE = 1536;
-
-// Seen past the end of the sea, under the horizon; the sea fades to this too.
-export const SEA_HORIZON_COLOR = [0.36, 0.8, 1.0];
 
 /** `vec3 skyColor(vec3 dir)`: the whole painted sky for a unit world direction. */
 export const SKY_CHUNK = /* glsl */ `
@@ -180,12 +178,25 @@ vec3 skyColor(vec3 d) {
   float bankLit = max(1.0 - aastep(occluded), puffLit(d, light, 7.0, 0.0));
   vec3 shade = mix(CLOUD_SHADE, CLOUD_DEEP, aastep(occluded - 0.14));
   vec3 bankCol = mix(shade, CLOUD_WHITE, bankLit);
-  // The base of the bank melts into a bright haze where it sits on the sea.
+  // The base of the bank melts into a bright haze where it sits on the sea of clouds.
   bankCol = mix(bankCol, vec3(0.9, 0.97, 1.0), 1.0 - smoothstep(0.0, 0.05, h));
   col = mix(col, bankCol, bank);
 
-  // Below the horizon: the far sea.
-  col = mix(col, vec3(${SEA_HORIZON_COLOR.join(', ')}), (1.0 - smoothstep(-0.02, 0.0, h)));
+  // Below the horizon: a sea of clouds seen from above, lit white on top with blue shade in the folds between
+  // billows, and deep open sky showing through the gaps.
+  float down = max(-h, 0.0);
+  vec2 fuv = d.xz / (down + 0.03) * 0.35;
+  fuv += (vec2(fbm3(vec3(fuv * 0.4, 21.0)), fbm3(vec3(fuv * 0.4, 27.0))) - 0.5) * 1.2;
+  vec4 floorPuff = worley3(vec3(fuv * 1.6, 3.3));
+  float fn = fbm3(vec3(fuv * 0.7, 13.0)) + (0.5 - floorPuff.x) * 0.16;
+  float fcover = 0.35 + 0.1 * smoothstep(0.2, 0.9, down); // more gaps looking straight down
+  vec3 below = mix(vec3(0.2, 0.74, 1.0), vec3(0.05, 0.45, 1.0), smoothstep(0.1, 0.9, down));
+  vec3 floorCol = mix(CLOUD_DEEP, CLOUD_SHADE, aastep(fn - fcover - 0.035));
+  floorCol = mix(floorCol, CLOUD_WHITE, aastep(fn - fcover - 0.07) * aastep(0.42 - floorPuff.x));
+  below = mix(below, floorCol, aastep(fn - fcover));
+  // Toward the horizon the floor melts into the same bright haze the towering bank stands on.
+  below = mix(vec3(0.9, 0.97, 1.0), below, smoothstep(0.015, 0.09, down));
+  col = mix(col, below, 1.0 - smoothstep(-0.012, 0.0, h));
   return col;
 }
 `;

@@ -13,6 +13,7 @@ import { createSpeedPopups } from '../entities/SpeedPopup.js';
 import { createReturnBursts } from '../entities/ReturnBurst.js';
 import { createTsunami } from '../entities/Tsunami.js';
 import { createSky } from '../entities/Sky.js';
+import { createClouds } from '../entities/Clouds.js';
 import { createCollision } from '../systems/collision.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture } from '../util/textures.js';
 import { BOOST_PADS, MAP_LAYOUT, WAVE_TRACK, WORLD_GATES } from '../../shared/constants.js';
@@ -85,6 +86,8 @@ const PLAZA_TILE = 4.8; // one paving slab
 export function buildStartingPlace(scene, renderer) {
   const lights = addLighting(scene);
   scene.add(createSky(renderer, SUN_OFFSET));
+  const clouds = createClouds();
+  scene.add(clouds.group);
   const materials = makeMaterials();
   addGround(scene, materials);
   addRoads(scene, materials);
@@ -136,14 +139,12 @@ export function buildStartingPlace(scene, renderer) {
   let knownWaveSolids = waveTrack.solids.length;
   let insidePremiumBoard = null;
 
-  // Sea beyond the open end of the corridor; the tsunami rolls in from far out on it.
-  // Keep the distant sea below the pit floors so the gray trench remains dry and visible.
+  // The tsunami rolls in from far beyond the open end of the corridor.
   const tsunami = createTsunami({
     width: CORRIDOR.halfWidth * 2 + 10,
     zFar: CORRIDOR.north - 300,
     // Waves finish dissolving right at the starting line (where the track's red is deepest), never reaching the starting place.
     zNear: ROOM.north + 2,
-    seaLevel: -WAVE_TRACK.pitDepth - 0.8,
   });
   scene.add(tsunami.group);
 
@@ -197,6 +198,7 @@ export function buildStartingPlace(scene, renderer) {
     gate.update(time);
     world2Bike.update(time);
     tsunami.update(time, player.position.z);
+    if (camera) clouds.update(camera);
     lights.followRider(player.position);
     speedPopups.update(time);
     returnBursts.update(time);
@@ -269,8 +271,8 @@ function makeMaterials() {
 
 function addGround(scene, { grass, plaza, floor }) {
 
-  // Land only inside the canyon ring: the sea (see Tsunami.js) surrounds it, so the water shows outside the walls.
-  // The ground runs a little under the wall (walls start up to 4 units out) so no water slips in between.
+  // Land only inside the canyon ring: the map floats in the sky, with clouds all around and below it.
+  // The ground runs a little under the wall (walls start up to 4 units out) so no sky slips in between.
   // The corridor is cut out: the wave place builds its own floor there, and its pits drop below ground level.
   const UNDER_WALL = 5;
   const groundPiece = (x0, x1, z0, z1) => {

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { SEA_HORIZON_COLOR } from './Sky.js';
 
 /**
  * The tsunamis. A sea fills the open end of the corridor, and waves rise out of the distance and roll south
@@ -179,7 +180,7 @@ ${CAUSTIC}
 void main() {
   float dist = distance(vWorld.xz, cameraPosition.xz);
   vec3 nearColor = vec3(0.08, 0.42, 0.9);
-  vec3 farColor = vec3(0.6, 0.84, 1.0); // meets the hazy horizon of the sky
+  vec3 farColor = vec3(${SEA_HORIZON_COLOR.join(', ')}); // meets the sky's sea horizon
   vec3 col = mix(nearColor, farColor, smoothstep(40.0, 600.0, dist));
   float ripples = caustic(vWorld.xz * 0.04, uTime * 0.35);
   col += vec3(0.6, 0.86, 1.0) * ripples * 0.3 * (1.0 - smoothstep(20.0, 350.0, dist));

@@ -3,11 +3,17 @@ import { clampToMap } from '../../shared/constants.js';
 
 const OFFSET = new THREE.Vector3(0, 3.2, 7); // behind + above the rider, at zoom 1
 const LOOK_OFFSET = new THREE.Vector3(0, 1.4, 0);
-const LERP = 0.2;
+// Smoothing rates, per second, applied by elapsed time rather than per frame, so the camera sits the same
+// distance behind the rider whatever the frame rate (a fixed per-frame lerp makes that distance wobble with
+// every uneven frame, which reads as the screen shaking).
+const FOLLOW_RATE = 14; // the camera and the point it looks at, sideways and forward
+const FOLLOW_RATE_VERTICAL = 6; // softer up and down, so ledges, steps and landings don't jolt the view
+const CAMERA_CATCH_RATE = 30; // eases out the jump when the map edge pushes the camera in
+const SNAP_DISTANCE = 40; // a teleport (respawn, return home): cut straight there instead of sweeping
 
 const ZOOM_MIN = 0.4; // close behind the rider
 const ZOOM_MAX = 6; // high above, showing the whole map area
-const SMOOTHING = 0.3;
+const VIEW_RATE = 21; // zoom / orbit / tilt easing, per second (about the old 0.3 per frame at 60 fps)
 
 const ORBIT_SPEED = 0.0035; // radians per pixel dragged
 const KEY_ORBIT_STEP = 0.2; // radians per Q / E press
@@ -136,12 +142,21 @@ export function attachCameraControls(camera) {
   };
 }
 
-/** Call every frame after the target has moved. */
-export function updateChaseCamera(camera, target) {
+/** Call every frame after the target has moved; `deltaSeconds` is the frame's length. */
+export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60) {
   const data = camera.userData;
-  data.zoom += (data.zoomTarget - data.zoom) * SMOOTHING;
-  data.yaw += (data.yawTarget - data.yaw) * SMOOTHING;
-  data.pitch += (data.pitchTarget - data.pitch) * SMOOTHING;
+  const ease = (rate) => 1 - Math.exp(-rate * deltaSeconds);
+  data.zoom += (data.zoomTarget - data.zoom) * ease(VIEW_RATE);
+  data.yaw += (data.yawTarget - data.yaw) * ease(VIEW_RATE);
+  data.pitch += (data.pitchTarget - data.pitch) * ease(VIEW_RATE);
+
+  // The point the camera follows and looks at: the rider (or a shop focus point), smoothed.
+  const goal = data.focusPoint ?? target.position;
+  if (!data.focus || data.focus.distanceTo(goal) > SNAP_DISTANCE) data.focus = goal.clone();
+  const follow = ease(FOLLOW_RATE);
+  data.focus.x += (goal.x - data.focus.x) * follow;
+  data.focus.z += (goal.z - data.focus.z) * follow;
+  data.focus.y += (goal.y - data.focus.y) * ease(FOLLOW_RATE_VERTICAL);
 
   // Zooming out also raises the camera faster than it pulls back, tilting the view toward top-down.
   const height = OFFSET.y * data.zoom ** 1.25;
@@ -149,17 +164,18 @@ export function updateChaseCamera(camera, target) {
   const radius = Math.hypot(height, reach);
   const pitch = THREE.MathUtils.clamp(Math.atan2(height, reach) + data.pitch, PITCH_MIN, PITCH_MAX);
 
-  // Keep the camera's world-space heading stable while the rider turns beneath it.
+  // Keep the camera's world-space heading stable while the rider turns beneath it. The camera is held rigidly
+  // at its offset from the smoothed focus, so the two never drift against each other.
   const yaw = data.yaw;
   const flat = radius * Math.cos(pitch);
-  const offset = new THREE.Vector3(flat * Math.sin(yaw), radius * Math.sin(pitch), flat * Math.cos(yaw));
-  const focus = data.focusPoint ?? target.position;
-  const desired = offset.add(focus);
+  data.desired ??= new THREE.Vector3();
+  const desired = data.desired.set(flat * Math.sin(yaw), radius * Math.sin(pitch), flat * Math.cos(yaw)).add(data.focus);
   // Keep the camera out of the canyon wall when the rider is near an edge.
   const inside = clampToMap(desired.x, desired.z, 1.5);
   desired.x = inside.x;
   desired.z = inside.z;
-  camera.position.lerp(desired, LERP);
-  const lookAt = focus.clone().add(LOOK_OFFSET);
-  camera.lookAt(lookAt);
+  if (camera.position.distanceTo(desired) > SNAP_DISTANCE * 2) camera.position.copy(desired);
+  else camera.position.lerp(desired, ease(CAMERA_CATCH_RATE));
+  data.lookAt ??= new THREE.Vector3();
+  camera.lookAt(data.lookAt.copy(data.focus).add(LOOK_OFFSET));
 }

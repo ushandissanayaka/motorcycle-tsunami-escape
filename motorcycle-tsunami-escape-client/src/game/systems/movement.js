@@ -5,6 +5,11 @@ import { clampToMap } from '../../shared/constants.js';
 const MOVE_SPEED = 12; // units/sec, tune per your world scale
 const JUMP_SPEED = 6; // units/sec upward
 const GRAVITY = 16; // units/sec^2
+// Climbing a ledge (or dropping down a small one) moves the rider there in a single physics step. The
+// visible bike instead keeps where it was and eases after it (POP_RECOVER per second), so jumping into a
+// trench wall and catching its lip reads as a quick hop, not a teleport. Collision is unaffected.
+const POP_MIN = 0.03; // smaller changes are ordinary slopes, followed exactly
+const POP_RECOVER = 16;
 
 // Camera-relative controls. W / A / S / D point forward / left / back / right as seen from the camera
 // (combinations give the diagonals). A quick tap only turns: A / D by TAP_TURN, and W / S by up to
@@ -13,21 +18,22 @@ const GRAVITY = 16; // units/sec^2
 // the key is held; a key whose direction the bike already faces (within FACING) drives straight away.
 // Each turn is a quick sweep rather than a snap: the bike swings into it at up to TURN_ACCEL, cruises at
 // no more than MAX_TURN_RATE and brakes just in time to land exactly on the new heading, with no
-// overshoot and no slow creep at the end. Like a real bike, it turns as fast as it drives: both limits
-// scale with the bike's drive speed (moveSpeed, which grows with collected Speed, level and Custom
-// Speed) relative to TURN_REFERENCE_SPEED, up to TURN_SCALE_MAX, past which an about-turn would take
-// only a frame or two and read as a jump. It leans into the turn as a real bike does, by
+// overshoot and no slow creep at the end. Like a real bike, it turns faster the faster it drives: both
+// limits scale with the bike's drive speed (moveSpeed, which grows with collected Speed, level and Custom
+// Speed) relative to TURN_REFERENCE_SPEED, within TURN_SCALE_MIN..MAX. The top turn rate is kept low
+// enough that the bike never swings more than ~10 deg between two frames at 60 fps: any faster and the eye
+// sees separate positions instead of a turn, which reads as the game running at a low frame rate. It leans into the turn as a real bike does, by
 // tan(lean) = speed * turn rate / LEAN_GRAVITY, so a faster bike leans further in the same turn.
 const DEG = Math.PI / 180;
 const TAP_TURN = 20 * DEG;
 const TAP_FACE = 120 * DEG;
 const FACING = 25 * DEG;
 const HOLD_MS = 120; // a press shorter than this is a tap
-const TURN_ACCEL = 500; // radians/sec^2, at TURN_REFERENCE_SPEED
-const MAX_TURN_RATE = 30; // radians/sec, at TURN_REFERENCE_SPEED
+const TURN_ACCEL = 70; // radians/sec^2, at TURN_REFERENCE_SPEED
+const MAX_TURN_RATE = 7; // radians/sec, at TURN_REFERENCE_SPEED
 const TURN_REFERENCE_SPEED = 12; // drive speed (units/sec) the two limits above are for
-const TURN_SCALE_MIN = 0.5;
-const TURN_SCALE_MAX = 3;
+const TURN_SCALE_MIN = 0.8;
+const TURN_SCALE_MAX = 1.5;
 const TURN_FINISH = 0.5 * DEG; // the last sliver of a turn is taken in one step
 const LEAN_GRAVITY = 800; // sets how far a given speed * turn rate leans the bike
 const MAX_LEAN = 32 * DEG;
@@ -186,12 +192,16 @@ function stepVertical(target, dt, collision) {
       data.grounded = false;
       data.jumpVelocity = 0;
     } else {
+      const snap = support - target.position.y;
+      if (Math.abs(snap) > POP_MIN) data.popOffset = (data.popOffset ?? 0) - snap;
       target.position.y = support;
       return;
     }
   }
 
   // A ledge that is within a step is climbed even in mid-air.
+  const climb = support - target.position.y;
+  if (climb > POP_MIN) data.popOffset = (data.popOffset ?? 0) - climb;
   target.position.y = Math.max(target.position.y, support);
   target.position.y += data.jumpVelocity * dt;
   data.jumpVelocity -= GRAVITY * dt;
@@ -245,6 +255,13 @@ export function updateMovement(target, keys, deltaSeconds, collision = null, cam
     if (drive !== 0) moveWithCollision(target, stepX, stepZ, collision);
     stepVertical(target, deltaSeconds / steps, collision);
   }
+
+  // The visible bike eases after any ledge the physics just stepped it onto (see POP_RECOVER).
+  if (target.userData.popOffset) {
+    target.userData.popOffset *= Math.exp(-POP_RECOVER * deltaSeconds);
+    if (Math.abs(target.userData.popOffset) < 1e-3) target.userData.popOffset = 0;
+  }
+  target.userData.setVisualOffset?.(target.userData.popOffset ?? 0);
 
   // Keep the rider inside the canyon wall.
   const inside = clampToMap(target.position.x, target.position.z);

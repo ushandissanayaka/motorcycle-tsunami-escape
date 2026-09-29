@@ -144,6 +144,8 @@ export function createPlayer() {
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
   // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.
   group.userData.setLean = (angle) => { visual.rotation.z = angle; };
+  // Holds the visible bike a little below / above the physics position while it eases onto a ledge.
+  group.userData.setVisualOffset = (y) => { visual.position.y = y; };
   group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>
     bike.userData.spinWheels?.(distance, deltaSeconds, trainingMultiplier);
 

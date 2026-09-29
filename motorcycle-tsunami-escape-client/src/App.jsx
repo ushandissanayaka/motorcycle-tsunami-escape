@@ -92,7 +92,7 @@ export default function App() {
     composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.7, 1.0));
     composer.addPass(new OutputPass());
 
-    const world = buildStartingPlace(scene);
+    const world = buildStartingPlace(scene, renderer);
     world.waveTrack.setRiderLevel(profileRef.current.level);
     bikeRef.current = world.player;
     const detachLeaderboards = world.leaderboards.attach(camera, renderer.domElement);

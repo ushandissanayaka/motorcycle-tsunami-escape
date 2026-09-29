@@ -82,10 +82,9 @@ const PLAZA_TILE = 4.8; // one paving slab
  * side, and a narrow corridor to the north, all ringed by a canyon
  * wall. Returns everything the render loop needs to update each frame.
  */
-export function buildStartingPlace(scene) {
+export function buildStartingPlace(scene, renderer) {
   const lights = addLighting(scene);
-  const sky = createSky();
-  scene.add(sky);
+  scene.add(createSky(renderer, SUN_OFFSET));
   const materials = makeMaterials();
   addGround(scene, materials);
   addRoads(scene, materials);
@@ -198,7 +197,6 @@ export function buildStartingPlace(scene) {
     gate.update(time);
     world2Bike.update(time);
     tsunami.update(time, player.position.z);
-    sky.userData.update(time);
     lights.followRider(player.position);
     speedPopups.update(time);
     returnBursts.update(time);

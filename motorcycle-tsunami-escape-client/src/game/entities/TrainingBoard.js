@@ -424,18 +424,18 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
     return uniforms;
   });
 
-  // Flickering lightning arcs crackling up from the edges of the deck.
+  // Stable lightning arcs crackling up from the edges of the deck.
   const BOLT_COUNT = 3;
   const BOLT_SEGMENTS = 7;
   let bolts = null;
   if (s.fx.bolts) {
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BOLT_COUNT * BOLT_SEGMENTS * 2 * 3), 3));
-    const material = new THREE.LineBasicMaterial({ color: s.fx.bolts, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+    const material = new THREE.LineBasicMaterial({ color: s.fx.bolts, transparent: true, opacity: 0.82, blending: THREE.AdditiveBlending, depthWrite: false });
     const lines = new THREE.LineSegments(geometry, material);
     lines.frustumCulled = false;
     group.add(lines);
-    bolts = { geometry, material, tick: -1 };
+    bolts = { geometry, material };
   }
   const regenerateBolts = () => {
     const positions = bolts.geometry.attributes.position;
@@ -458,6 +458,7 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
     }
     positions.needsUpdate = true;
   };
+  if (bolts) regenerateBolts();
 
   // Twinkling stars drifting up off the deck.
   const sparkleCount = Math.round(18 + 6 * sw);
@@ -488,14 +489,6 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
       streak.position.x = L / 2 - 1 - progress * (L - 1);
     }
     for (const uniforms of wisps) uniforms.uTime.value = time;
-    if (bolts) {
-      const tick = Math.floor(time * 11);
-      if (tick !== bolts.tick) {
-        bolts.tick = tick;
-        regenerateBolts();
-      }
-      bolts.material.opacity = Math.random() < 0.25 ? 0 : 0.6 + Math.random() * 0.4;
-    }
     const positions = sparkleGeometry.attributes.position;
     sparklePhases.forEach((p, i) => {
       positions.setXYZ(i, p.x, deckTop + 0.1 + ((time * 0.45 + p.phase) % 1) * 2 * hs, p.z);

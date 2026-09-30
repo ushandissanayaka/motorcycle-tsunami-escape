@@ -32,13 +32,10 @@
         transition: opacity 0.45s ease; }
       .skip-initial-loading #loading-screen { display: none; }
       #loading-screen.loading-screen--done { opacity: 0; pointer-events: none; }
-      /* The blurred art drifts slowly from side to side; only a transform animates, so it stays on the GPU. */
+      /* The blurred art, standing still. */
       #loading-screen .loading-bg {
-        position: absolute; top: 0; left: 0; width: 108%; height: 100%;
-        background: url(/loading/background.jpg) center / cover no-repeat;
-        animation: loading-drift 18s ease-in-out infinite alternate; will-change: transform; }
-      @keyframes loading-drift { from { transform: translateX(0); } to { transform: translateX(-7%); } }
-      @media (prefers-reduced-motion: reduce) { #loading-screen .loading-bg { animation: none; transform: translateX(-3.5%); } }
+        position: absolute; inset: 0;
+        background: url(/loading/background.jpg) center / cover no-repeat; }
       /* Panel content flows in a column, so on small screens (where the minimum sizes below take over)
          everything still fits; on desktop it lands exactly on the reference layout. */
       #loading-screen .loading-panel {

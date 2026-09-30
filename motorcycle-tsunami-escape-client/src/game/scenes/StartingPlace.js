@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { createPlayer } from '../entities/Player.js';
+import { createShatter } from '../entities/Shatter.js';
+import { createWindStreaks } from '../entities/WindStreaks.js';
 import { createTrainingBoard } from '../entities/TrainingBoard.js';
 import { createBikeStore } from '../entities/BikeStore.js';
 import { createCanyonWall } from '../entities/CanyonWall.js';
@@ -97,6 +99,13 @@ export function buildStartingPlace(scene, renderer) {
   scene.add(player);
   const speedPopups = createSpeedPopups(scene);
   const returnBursts = createReturnBursts(scene);
+  const shatter = createShatter(scene);
+  const wind = createWindStreaks();
+  player.add(wind.mesh); // slips past along the rider's heading, and hides with the rider
+  // Break the rider apart once while loading and put it straight back together (nothing is drawn in between),
+  // so the first wave to hit plays on code that is already warmed up instead of stalling that frame.
+  shatter.burst(player, 0, new THREE.Vector3(0, 3, 7), 0);
+  shatter.clear();
 
   // Training boards line up on the pad, south to north, with their monitors on the east side
   // and the ramps facing the stem road.
@@ -104,6 +113,7 @@ export function buildStartingPlace(scene, renderer) {
     createTrainingBoard({
       multiplier: pad.multiplier,
       label: pad.label,
+      banner: pad.banner ?? true,
       style: pad.style,
       length: pad.length,
       width: pad.width,
@@ -144,8 +154,8 @@ export function buildStartingPlace(scene, renderer) {
   const tsunami = createTsunami({
     width: CORRIDOR.halfWidth * 2 + 10,
     zFar: CORRIDOR.north - 300,
-    // Waves finish dissolving a few units out past the starting line, so even a crest curling forward as it
-    // crashes stays clear of the starting place.
+    // Waves vanish as their foot reaches this line, a few units out past the starting line. Raise it (toward
+    // ROOM.north) to let them roll further before they vanish.
     zNear: ROOM.north - 5,
   });
   scene.add(tsunami.group);
@@ -217,9 +227,51 @@ export function buildStartingPlace(scene, renderer) {
     lights.followRider(player.position);
     speedPopups.update(time);
     returnBursts.update(time);
+    shatter.update(time);
   };
 
-  return { player, boostPads, store, collision, update, leaderboards, waveTrack, speedPopups, returnBursts, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
+  /**
+   * Builds every material's shaders now, while the loading screen is up, instead of the first time each thing
+   * comes into view or into the sun's shadow mid-ride (building one stalls that frame, up to a few hundred ms).
+   * `renderTarget` is what the scene is really drawn into (the composer's buffer: its colour output differs from
+   * the canvas's, and so do the shaders), and `render` draws one ordinary frame.
+   */
+  const warmShaders = (renderer, camera, renderTarget, render) => {
+    const previous = renderer.getRenderTarget();
+    renderer.setRenderTarget(renderTarget);
+    renderer.compile(scene, camera); // everything in the scene, in view or not
+    renderer.setRenderTarget(previous);
+    // compile() skips the shadow pass, so draw one frame that shadows the whole map. three.js draws every
+    // shadow with one shared material whose shader is only re-chosen when the next caster switches between
+    // instanced and plain, so which variant (textured or not, which side) gets built depends on the order
+    // things happen to be drawn in: riding about later can still hit one never built. Casters that alternate
+    // instanced / plain through every combination make sure all of them are built now.
+    const variants = new THREE.Group();
+    const box = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+    const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+    white.needsUpdate = true;
+    const materials = [];
+    for (const side of [THREE.FrontSide, THREE.BackSide, THREE.DoubleSide]) {
+      for (const map of [null, white]) {
+        const material = new THREE.MeshStandardMaterial({ map, side });
+        materials.push(material);
+        for (const caster of [new THREE.InstancedMesh(box, material, 1), new THREE.Mesh(box, material)]) {
+          caster.castShadow = true;
+          caster.frustumCulled = false;
+          variants.add(caster);
+        }
+      }
+    }
+    variants.position.copy(player.position);
+    scene.add(variants);
+    lights.withWholeMapShadows(render);
+    scene.remove(variants);
+    box.dispose();
+    white.dispose();
+    for (const material of materials) material.dispose();
+  };
+
+  return { player, boostPads, store, collision, update, warmShaders, leaderboards, waveTrack, speedPopups, returnBursts, shatter, wind, setStoreStates: store.setStates, setWaveWarning: waveTrack.setWarning, setWavesEnabled: tsunami.setEnabled, tsunami };
 }
 
 // The sun stands low over the far south-west corner, behind the Group Chest, so everything throws its shadow
@@ -264,6 +316,22 @@ function addLighting(scene) {
   glow(0xffc93a, 35, BOARD_X, 6, TRAINING_CENTER_Z); // training place: warm gold
 
   return {
+    /**
+     * Runs `render` with the sun's shadow window stretched over the whole map (and the sun pulled far back to
+     * match), so every shadow-casting material gets its shadow shader built, then puts the window back.
+     */
+    withWholeMapShadows(render) {
+      const view = sun.shadow.camera;
+      const saved = { left: view.left, right: view.right, top: view.top, bottom: view.bottom, far: view.far };
+      const savedPosition = sun.position.clone();
+      Object.assign(view, { left: -700, right: 700, top: 700, bottom: -700, far: 4000 });
+      view.updateProjectionMatrix();
+      sun.position.copy(sun.target.position).addScaledVector(SUN_OFFSET, 20);
+      render();
+      Object.assign(view, saved);
+      view.updateProjectionMatrix();
+      sun.position.copy(savedPosition);
+    },
     /** Keeps the sun's shadow window centred on the rider. */
     followRider(position) {
       // Move the shadow window only in whole shadow-map texels (measured across the sun's view), so the

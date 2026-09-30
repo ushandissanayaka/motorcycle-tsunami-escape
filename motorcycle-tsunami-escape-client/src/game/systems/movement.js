@@ -172,6 +172,8 @@ function steer(target, keys, deltaSeconds, cameraYaw) {
 }
 
 const MAX_SUBSTEP = 0.4; // world units; keeps fast riders from tunnelling through walls
+const UP = new THREE.Vector3(0, 1, 0);
+const forward = new THREE.Vector3(); // reused every frame rather than making new vectors to throw away
 
 /** Move by (dx, dz), sliding along solids instead of stopping dead. */
 function moveWithCollision(target, dx, dz, collision) {
@@ -256,7 +258,7 @@ export function updateMovement(target, keys, deltaSeconds, collision = null, cam
   }
 
   // Drive along the bike's heading, which the chase camera follows.
-  const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), target.rotation.y);
+  forward.set(0, 0, -1).applyAxisAngle(UP, target.rotation.y);
   const speed = target.userData.moveSpeed || MOVE_SPEED;
   const drive = throttle * speed;
   const distance = Math.abs(drive) * deltaSeconds;

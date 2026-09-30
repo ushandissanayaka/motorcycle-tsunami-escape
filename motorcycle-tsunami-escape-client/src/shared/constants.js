@@ -78,15 +78,15 @@ export function clampToMap(x, z, margin = 7) {
 /**
  * Training boards in row order, south to north along the east wall.
  * `style` picks the board's colour scheme (see entities/TrainingBoard.js).
- * The three steel boards share one tier; their 5x is a placeholder value.
+ * The three steel boards share one tier; their 5x is a placeholder value, so they float no banner (`banner: false`).
  */
 // Sizes rank white 100x > purple 25x > blue 9x > gold 3x > steel; `height` scales the deck, rails and monitor stand.
 export const BOOST_PADS = [
   { id: 'pad_9x', label: '9x Speed', multiplier: 9, style: 'blue', width: 3.4, length: 6.4, height: 1.1 },
   { id: 'pad_3x_a', label: '3x Speed', multiplier: 3, style: 'yellow', width: 3.1, length: 4.7, height: 0.95 },
-  { id: 'pad_5x_a', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8 },
-  { id: 'pad_5x_b', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8 },
-  { id: 'pad_5x_c', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8 },
+  { id: 'pad_5x_a', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8, banner: false },
+  { id: 'pad_5x_b', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8, banner: false },
+  { id: 'pad_5x_c', label: '5x Speed', multiplier: 5, style: 'steel', width: 2.3, length: 3.7, height: 0.8, banner: false },
   { id: 'pad_3x_b', label: '3x Speed', multiplier: 3, style: 'yellow', width: 3.0, length: 4.5, height: 0.95 },
   { id: 'pad_25x', label: '25x Speed', multiplier: 25, style: 'purple', width: 6.1, length: 8.6, height: 1.35 },
   { id: 'pad_100x', label: '100x Speed', multiplier: 100, style: 'mono', width: 7.6, length: 9.6, height: 1.6 },
@@ -136,3 +136,16 @@ export function requirementText(bike) {
 }
 
 export const WORLD_GATES = [{ id: 'world_2', name: 'World 2', levelRequired: 75 }];
+
+/** A big count kept short for labels and messages: 950, 1.2K, 18.7M, 3B, ... (one decimal, dropped when .0). */
+export function formatShort(value) {
+  const units = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi'];
+  let scaled = value;
+  let unit = 0;
+  while (unit < units.length - 1 && Math.round(Math.abs(scaled) * 10) / 10 >= 1000) {
+    scaled /= 1000;
+    unit += 1;
+  }
+  const text = unit === 0 ? String(Math.round(scaled)) : scaled.toFixed(1).replace(/\.0$/, '');
+  return `${text}${units[unit]}`;
+}

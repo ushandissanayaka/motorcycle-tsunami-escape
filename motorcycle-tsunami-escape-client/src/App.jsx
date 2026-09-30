@@ -14,7 +14,9 @@ import { attachCameraControls, createChaseCamera, updateChaseCamera } from './ga
 import { createInputState, updateMovement } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
-import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress } from './shared/constants.js';
+import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
+import { HIDDEN_COUNT_OVER } from './game/entities/WaveTrack.js';
+import { SPEED_POPUP_VALUE } from './game/entities/SpeedPopup.js';
 import { joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
@@ -74,6 +76,9 @@ export default function App() {
   const [bikePurchaseOpen, setBikePurchaseOpen] = useState(false);
   const [aetherunePurchaseOpen, setAetherunePurchaseOpen] = useState(false);
   const [premiumBoardPurchase, setPremiumBoardPurchase] = useState(null);
+  const [teleportBackOffer, setTeleportBackOffer] = useState(false);
+  const [winsPurchaseOpen, setWinsPurchaseOpen] = useState(false);
+  const [rewardBanner, setRewardBanner] = useState(null); // { id, text }: "You received N Wins!"
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
 
@@ -136,8 +141,17 @@ export default function App() {
       setProfile((current) => ({ ...current, speed: speedProgress, level: riderLevel, levelProgress }));
     };
     let lastTrainingPad = null;
+    let lastLockedReward = null; // the locked (red) mat the rider is on, so its offer opens once per visit
     let respawnFreezeUntil = 0;
     let pendingReturn = null; // { at, rewardId }: a returned trophy's burst is playing; teleport home at `at`
+    let wipeout = null; // { at }: a wave broke the rider apart; the pieces are settling, respawn at `at`
+    const sendHome = () => {
+      world.player.position.set(0, 0, 0);
+      world.player.rotation.set(0, 0, 0);
+      Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
+      world.player.userData.grounded = true;
+      world.player.userData.jumpVelocity = 0;
+    };
     const clearKeys = () => {
       keys.clear();
       camera.userData.steer = 0;
@@ -219,17 +233,21 @@ export default function App() {
         // The burst is over: bring the trophy back so it can be collected again, teleport home and
         // hand control straight back.
         world.waveTrack.restoreReward(pendingReturn.rewardId);
-        world.player.position.set(0, 0, 0);
-        world.player.rotation.set(0, 0, 0);
-        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
-        world.player.userData.grounded = true;
-        world.player.userData.jumpVelocity = 0;
+        sendHome();
         pendingReturn = null;
+      }
+      if (wipeout && now >= wipeout.at) {
+        // The pieces have settled and shrunk away: the rider is whole again, back at the start.
+        wipeout = null;
+        sendHome();
+        world.player.visible = true;
+        setTeleportBackOffer(false); // the Teleport Back offer is only for while the wreck lies there
+        setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
       }
       const previousX = world.player.position.x;
       const previousZ = world.player.position.z;
-      if (pendingReturn) {
-        clearKeys(); // stay on the mat while the burst plays
+      if (pendingReturn || wipeout) {
+        clearKeys(); // stay put while the burst plays, or while the broken rider's pieces settle
       } else if (now >= respawnFreezeUntil) {
         updateMovement(world.player, keys, delta, world.collision, camera);
       } else {
@@ -251,6 +269,9 @@ export default function App() {
       speedGainRemainder += bonusSpeedRef.current; // wheelspin / daily reward prizes
       bonusSpeedRef.current = 0;
       world.player.userData.spinWheels?.(trainingPad ? 0 : movedDistance, delta, trainingMultiplier);
+      // On a training board the bike trembles against the belt; a light breeze shows how fast it's going.
+      world.player.userData.rumble?.(trainingPad ? 1 : 0, delta, now / 1000);
+      world.wind.update(delta, delta > 0 ? movedDistance / delta : 0, trainingMultiplier);
 
       const trainingState = lockedPremiumBoard ? `locked-${overlappingPad.multiplier}x` : trainingPad;
       if (trainingState !== lastTrainingPad) {
@@ -259,7 +280,7 @@ export default function App() {
         else if (trainingPad) setNotice({ id: Date.now(), text: `${trainingPad.label} training active! Wheels spinning for a ${trainingPad.multiplier}x speed boost.` });
       }
 
-      const reward = world.player.userData.grounded ? world.waveTrack.rewardAt(world.player.position) : null;
+      const reward = world.player.userData.grounded && !wipeout ? world.waveTrack.rewardAt(world.player.position) : null;
       if (reward && world.waveTrack.collectReward(reward.id)) {
         setProfile((current) => ({
           ...current,
@@ -270,7 +291,13 @@ export default function App() {
         world.returnBursts.spawn(world.player.position, now / 1000);
         pendingReturn = { at: now + world.returnBursts.duration * 1000, rewardId: reward.id };
         clearKeys();
+        // A big reward's count isn't on its mat (see HIDDEN_COUNT_OVER), so it is told here instead.
+        if (reward.wins > HIDDEN_COUNT_OVER) setRewardBanner({ id: now, text: `You received ${formatShort(reward.wins)} Wins!` });
       }
+      // Driving onto a red mat this level can't collect yet offers the 2x Wins boost instead.
+      const lockedReward = world.player.userData.grounded && !wipeout ? world.waveTrack.lockedRewardAt(world.player.position) : null;
+      if (lockedReward && lockedReward !== lastLockedReward) setWinsPurchaseOpen(true);
+      lastLockedReward = lockedReward;
 
       const earnedSpeed = Math.floor(speedGainRemainder);
       if (earnedSpeed > 0) {
@@ -293,7 +320,7 @@ export default function App() {
       if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
       const nowSeconds = now / 1000;
       if (speedPopupAccum > 0 && nowSeconds - lastSpeedPopupTime > SPEED_POPUP_INTERVAL) {
-        world.speedPopups.spawn(world.player.position, speedPopupAccum, nowSeconds, world.player.rotation.y);
+        world.speedPopups.spawn(world.player.position, SPEED_POPUP_VALUE, nowSeconds, camera.userData.yaw);
         speedPopupAccum = 0;
         lastSpeedPopupTime = nowSeconds;
       }
@@ -323,13 +350,15 @@ export default function App() {
         camera.userData.zoomTarget = 0.4;
         setAetherunePurchaseOpen(true);
       });
-      if (world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT)) {
-        world.player.position.set(0, 0, 0);
-        world.player.rotation.set(0, 0, 0);
-        Object.assign(world.player.userData, { turnRemaining: 0, turnVelocity: 0, popOffset: 0 });
-        world.player.userData.grounded = true;
-        world.player.userData.jumpVelocity = 0;
-        setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
+      const hitBy = wipeout || pendingReturn ? null : world.tsunami.hitsPlayer(world.player, world.collision, RIDER_HEIGHT, previousZ);
+      if (hitBy) {
+        // Break the rider apart where the wave caught them and let the pieces settle before sending them home.
+        const { x, y, z } = world.player.position;
+        world.shatter.burst(world.player, world.collision.supportAt(x, z, y), camera.position, now / 1000);
+        world.player.visible = false;
+        wipeout = { at: now + world.shatter.duration * 1000 };
+        clearKeys();
+        setTeleportBackOffer(true);
       }
       if (room && now - lastPresenceSend > 100) {
         lastPresenceSend = now;
@@ -362,6 +391,8 @@ export default function App() {
     const giveUp = new Promise((resolve) => setTimeout(resolve, 20000));
     Promise.race([ready, giveUp]).then(() => {
       if (!active) return;
+      // With the models in, build every shader behind the loading screen, so none is built mid-ride.
+      world.warmShaders(renderer, camera, composer.readBuffer, () => composer.render());
       gameplayStart();
       hideLoadingScreen();
     });
@@ -399,6 +430,13 @@ export default function App() {
       bikeRef.current.userData.moveSpeed = bike.speed;
     }
     if (bike) setCustomSpeed(bike.speed);
+    // Measure the new bike for a wave's wipeout ahead of time, in idle time (see Shatter.prepare): once now,
+    // and again after a textured model loading in the background has had time to arrive.
+    const prepare = () => {
+      if (bikeRef.current) worldRef.current?.shatter.prepare(bikeRef.current);
+    };
+    const timers = [setTimeout(prepare, 1000), setTimeout(prepare, 6000)];
+    return () => timers.forEach(clearTimeout);
   }, [profile.selectedBike]);
 
   useEffect(() => {
@@ -458,10 +496,14 @@ export default function App() {
         bikePurchaseOpen={bikePurchaseOpen}
         aetherunePurchaseOpen={aetherunePurchaseOpen}
         premiumBoardPurchase={premiumBoardPurchase}
+        teleportBackOffer={teleportBackOffer}
+        winsPurchaseOpen={winsPurchaseOpen}
+        rewardBanner={rewardBanner}
         onClosePurchase={() => {
           setBikePurchaseOpen(false);
           setAetherunePurchaseOpen(false);
           setPremiumBoardPurchase(null);
+          setWinsPurchaseOpen(false);
           if (cameraRef.current) {
             cameraRef.current.userData.focusPoint = null;
             cameraRef.current.userData.zoomTarget = 1;

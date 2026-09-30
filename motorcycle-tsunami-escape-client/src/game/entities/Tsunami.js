@@ -3,7 +3,7 @@ import * as THREE from 'three';
 /**
  * The tsunamis. Waves rise out of the distance beyond the open end of the corridor and roll south
  * down the wave place toward the start, growing taller as they approach. Their crests curl toward the riders.
- * When a wave reaches the mouth of the corridor it breaks and dissolves in spray.
+ * When the foot of a wave reaches the starting line it vanishes at once, at its full height.
  *
  * There are four kinds of wave (WAVE_TYPES): very slow, slow, medium and fast. Each has its own water colour,
  * visible from far away, and a floating name tag (name + face) that only fades in as it gets close.
@@ -325,8 +325,6 @@ const MAX_OVERTAKE_DELAY = 30; // seconds
 const MAX_WAVES = 5; // waves in the water at once
 const SPAWN_AHEAD = 320; // a wave appears this far ahead of a rider who has gone past zFar
 const FULL_HEIGHT_DISTANCE = 480; // a wave has swollen to full size after rolling this far
-const BREAK_DURATION = 1.8; // seconds a wave takes to crash and dissolve once it starts breaking
-const BREAK_CREEP = 0.35; // fraction of run speed a wave still creeps forward while breaking
 
 export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], startHeight = 4, endHeight = 20 }) {
   const group = new THREE.Group();
@@ -392,7 +390,7 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
     const type = WAVE_TYPES[id];
     const spawnZ = Math.min(zFar, riderZ - SPAWN_AHEAD);
     slot.active = true;
-    Object.assign(slot, { id, type, speed: type.speed, z: spawnZ, prevZ: spawnZ, height: startHeight, sizeScale: type.height * randomBetween(0.96, 1.04), spawnOrder: state.cycle, phase: 'run', breakProgress: 0, caught: false, travelled: 0 });
+    Object.assign(slot, { id, type, speed: type.speed, z: spawnZ, prevZ: spawnZ, height: startHeight, sizeScale: type.height * randomBetween(0.96, 1.04), spawnOrder: state.cycle, caught: false, travelled: 0 });
     setDisplayColor(slot.uniforms.uCrest.value, type.crest);
     setDisplayColor(slot.uniforms.uBody.value, type.body);
     setDisplayColor(slot.uniforms.uBase.value, type.base);
@@ -435,40 +433,26 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
     for (const wave of [...state.waves]) {
       wave.uniforms.uTime.value = time;
       wave.prevZ = wave.z;
-      if (wave.phase === 'run') {
-        wave.z += wave.speed * dt;
-        wave.travelled += wave.speed * dt;
-        const t = THREE.MathUtils.clamp(wave.travelled / FULL_HEIGHT_DISTANCE, 0, 1);
-        wave.height = (startHeight + (endHeight - startHeight) * t ** 1.4) * wave.sizeScale; // it swells as it closes in
-        wave.uniforms.uCurl.value = 1;
-        // Start breaking early enough that, creeping forward at BREAK_CREEP while it crashes,
-        // the wave finishes dissolving right at zNear (the starting line, where the track's red is deepest)
-        // instead of overshooting into the starting place.
-        const breakTravel = wave.speed * BREAK_CREEP * BREAK_DURATION;
-        if (wave.z >= zNear - breakTravel) {
-          wave.phase = 'break';
-          wave.breakProgress = 0;
-        }
-      } else {
-        wave.breakProgress += dt / BREAK_DURATION;
-        wave.z += wave.speed * BREAK_CREEP * dt;
-        const u = Math.min(wave.breakProgress, 1);
-        wave.height = endHeight * wave.sizeScale * (1 - u) ** 1.6; // it crashes down and dissolves
-        wave.uniforms.uCurl.value = 1 + 2.5 * u;
-        if (u >= 1) {
-          retire(wave);
-          continue;
-        }
+      wave.z += wave.speed * dt;
+      wave.travelled += wave.speed * dt;
+      const t = THREE.MathUtils.clamp(wave.travelled / FULL_HEIGHT_DISTANCE, 0, 1);
+      wave.height = (startHeight + (endHeight - startHeight) * t ** 1.4) * wave.sizeScale; // it swells as it closes in
+      wave.uniforms.uCurl.value = 1;
+      // The moment the wave's foot reaches zNear it simply vanishes at its full height: it does not sink or
+      // crash first.
+      if (wave.z >= zNear) {
+        retire(wave);
+        continue;
       }
       wave.root.position.z = wave.z;
       wave.uniforms.uHeight.value = Math.max(wave.height, 0.01);
-      // The shade reaches about as far as the crest leans over, and fades as the wave crashes.
+      // The shade reaches about as far as the crest leans over.
       wave.frontShadow.scale.z = wave.height * 0.9 + 3;
       wave.frontShadow.material.uniforms.uStrength.value = 0.5 * THREE.MathUtils.smoothstep(wave.height, 1, 8);
 
       // The colour shows from anywhere; the name tag only fades in as the rider gets close.
       const near = 1 - THREE.MathUtils.smoothstep(Math.abs(wave.z - riderZ), TAG_FADE.full, TAG_FADE.none);
-      wave.tag.material.opacity = wave.phase === 'run' ? near : near * (1 - Math.min(wave.breakProgress * 2, 1));
+      wave.tag.material.opacity = near;
       // Tags of waves that are close together (about to pass one another) are stacked so they stay readable.
       const stacked = state.waves.filter((other) => other !== wave && Math.abs(other.z - wave.z) < TAG_STACK_RANGE && other.spawnOrder < wave.spawnOrder).length;
       wave.tag.position.set(0, Math.max(wave.height, startHeight) + TAG_LIFT + stacked * TAG_STACK_STEP, 0);
@@ -485,25 +469,31 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
     }
   };
 
-  /** True when a wave sweeps over the rider (each wave catches a rider at most once). The wave's
-   * visible body starts at world y=0; a rider whose head stays below that
-   * height inside a pit is sheltered underneath the crest. */
-  const hitsPlayer = (player, collision, riderHeight) => {
-    if (!state.enabled) return false;
+  /**
+   * The wave that has just hit the rider, or null. A rider is hit wherever they touch the water: the front
+   * rolling into them, riding into its back from behind, or hopping up out of a pit while it rolls overhead.
+   * Only a rider whose head stays below ground level down in a pit is sheltered (the wave's body starts at
+   * y = 0), and only for as long as they stay down there. Both the wave's and the rider's whole movement this
+   * frame are tested, so neither a fast wave nor a fast rider can skip through the other. Each wave hits a
+   * rider at most once. `riderPrevZ` is where the rider was on the frame before.
+   */
+  const hitsPlayer = (player, collision, riderHeight, riderPrevZ = player.position.z) => {
+    if (!state.enabled) return null;
     const { x, y, z } = player.position;
-    if (Math.abs(x) > width / 2) return false;
-    const sheltered = collision?.pitAt(x, z) && y + riderHeight < 0;
+    if (Math.abs(x) > width / 2) return null;
+    if (collision?.pitAt(x, z) && y + riderHeight < 0) return null;
+    const riderMin = Math.min(riderPrevZ, z);
+    const riderMax = Math.max(riderPrevZ, z);
     for (const wave of state.waves) {
-      if (wave.caught) continue;
+      if (wave.caught || y > wave.height) continue; // a rider above the crest is clear of it
       const thickness = wave.height * 0.64 + 0.3; // the foot's thickness in the wave shader
-      // Use the whole distance the wave moved this frame, so a fast wave cannot skip over a rider.
-      const reachedFront = Math.max(wave.prevZ, wave.z) >= z - 0.5;
-      const beforeBack = Math.min(wave.prevZ, wave.z) <= z + thickness;
-      if (!reachedFront || !beforeBack) continue;
+      const front = Math.max(wave.prevZ, wave.z) + 0.5;
+      const back = Math.min(wave.prevZ, wave.z) - thickness;
+      if (riderMax < back || riderMin > front) continue;
       wave.caught = true;
-      if (!sheltered) return true;
+      return wave;
     }
-    return false;
+    return null;
   };
 
   /** Sends a wave of the given kind (a key of WAVE_TYPES) right away, e.g. for testing. */

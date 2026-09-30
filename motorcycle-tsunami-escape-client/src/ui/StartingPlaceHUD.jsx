@@ -27,6 +27,7 @@ import aetheruneBikeArt from '../assets/popups/inventory_bike.png';
 import pack100kArt from '../assets/hud/pack100k.png';
 import pack1mArt from '../assets/hud/pack1m.png';
 import pack10mArt from '../assets/hud/pack10m.png';
+import teleportBackArt from '../assets/hud/teleport_back.png';
 
 export const CUSTOM_SPEED_MAX = 116;
 
@@ -57,6 +58,43 @@ const BOX = {
   pack100k: [578, 900, 800, 982], pack1m: [803, 900, 1023, 982], pack10m: [1027, 893, 1342, 982],
 };
 
+// The loading ring behind the purchase dialog: a comet-like arc, thickest at its round head and tapering to a
+// hairline along its tail, which also fades out (a conic mask in the CSS). One filled path, built once.
+const SPINNER_PATH = (() => {
+  const RADIUS = 45;
+  const SWEEP = 300; // degrees from the tail to the head
+  const STEPS = 60;
+  const HEAD = 7;
+  const TAIL = 0.5;
+  const point = (degrees, radius) => {
+    const angle = (degrees * Math.PI) / 180;
+    return `${(50 + radius * Math.cos(angle)).toFixed(2)} ${(50 + radius * Math.sin(angle)).toFixed(2)}`;
+  };
+  const outer = [];
+  const inner = [];
+  for (let i = 0; i <= STEPS; i += 1) {
+    const t = i / STEPS;
+    const half = (TAIL + (HEAD - TAIL) * t ** 1.6) / 2;
+    outer.push(point(t * SWEEP, RADIUS + half));
+    inner.push(point(t * SWEEP, RADIUS - half));
+  }
+  return `M${outer.join(' L')} A${HEAD / 2} ${HEAD / 2} 0 0 1 ${inner[STEPS]} L${inner.reverse().join(' L')} Z`;
+})();
+
+/** The Teleport Back item's icon: a red-knobbed joystick on a blue base. */
+function TeleportIcon() {
+  return (
+    <svg className="purchase-teleport-icon" viewBox="0 0 68 68" aria-hidden="true">
+      <path d="M12 46 34 36l22 10-22 11z" fill="#3f7fe0" />
+      <path d="M12 46v6l22 11V57zM56 46v6L34 63V57z" fill="#2a58a8" />
+      <ellipse cx="34" cy="46" rx="6" ry="3" fill="#1d3d78" />
+      <path d="M31.5 46 29 22h5l2.5 24z" fill="#c9ccd6" />
+      <circle cx="30" cy="17" r="10" fill="#ef3b4f" />
+      <circle cx="26.5" cy="13.5" r="3.4" fill="#ff9aa6" />
+    </svg>
+  );
+}
+
 const formatSpeed = (value) => (Number.isInteger(value) ? String(value) : value.toFixed(1));
 
 function Art({ src, box, label, onClick, className = '' }) {
@@ -74,17 +112,28 @@ function StaticArt({ src, box }) {
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
   speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, aetherunePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
+  teleportBackOffer = false, winsPurchaseOpen = false, rewardBanner = null,
 }) {
   const [menuPopup, setMenuPopup] = useState('daily'); // greet the player with Daily Rewards on load
   const [shopPurchase, setShopPurchase] = useState(null);
   const [wavesDisabled, setWavesDisabled] = useState(false);
   const [showWavePurchase, setShowWavePurchase] = useState(false);
+  const [showTeleportPurchase, setShowTeleportPurchase] = useState(false);
   const [editingSpeed, setEditingSpeed] = useState(false);
   const [speedDraft, setSpeedDraft] = useState('');
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
+  const [banner, setBanner] = useState(null);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  // Big gold "You received N Wins!" across the top for a moment (its CSS animation fades it out).
+  useEffect(() => {
+    if (!rewardBanner) return undefined;
+    setBanner(rewardBanner);
+    const timer = setTimeout(() => setBanner(null), 2800);
+    return () => clearTimeout(timer);
+  }, [rewardBanner]);
 
   useEffect(() => {
     if (notice) showMessage(notice.text);
@@ -108,6 +157,7 @@ export default function StartingPlaceHUD({
   const closePurchase = () => {
     setShopPurchase(null);
     setShowWavePurchase(false);
+    setShowTeleportPurchase(false);
     onClosePurchase?.();
   };
   const toggleWaves = press(() => {
@@ -167,11 +217,17 @@ export default function StartingPlaceHUD({
       <Art src={wheelArt} box={BOX.wheel} label="Wheelspin" onClick={toggleMenu('wheel')} />
       <Art src={wavesArt} box={BOX.waves} label={wavesDisabled ? 'Enable waves' : 'Disable waves'} onClick={toggleWaves} className={wavesDisabled ? 'is-off' : ''} />
 
-      {(showWavePurchase || bikePurchaseOpen || aetherunePurchaseOpen || premiumBoardPurchase || shopPurchase) && (
+      {/* Offered while a wave's wreckage settles and for a while after the respawn */}
+      {teleportBackOffer && (
+        <button className="hud-btn teleport-back-btn" aria-label="Teleport Back for 9 Robux" onClick={press(() => setShowTeleportPurchase(true))}>
+          <img src={teleportBackArt} alt="" draggable={false} />
+        </button>
+      )}
+
+      {(showTeleportPurchase || winsPurchaseOpen || showWavePurchase || bikePurchaseOpen || aetherunePurchaseOpen || premiumBoardPurchase || shopPurchase) && (
         <div className="purchase-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closePurchase(); }}>
           <svg className="purchase-spinner" viewBox="0 0 100 100" role="img" aria-label="Loading">
-            <circle className="purchase-spinner-track" cx="50" cy="50" r="45" />
-            <circle className="purchase-spinner-arc" cx="50" cy="50" r="45" />
+            <path d={SPINNER_PATH} />
           </svg>
           <section className="purchase-dialog" role="dialog" aria-modal="true" aria-labelledby="wave-purchase-title">
             <header className="purchase-header">
@@ -180,7 +236,9 @@ export default function StartingPlaceHUD({
               <button className="purchase-close" aria-label="Close" onClick={closePurchase}>×</button>
             </header>
             <div className="purchase-item">
-              {shopPurchase ? <img src={shopPurchase.img} alt="" />
+              {showTeleportPurchase ? <TeleportIcon />
+                : winsPurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏆</span>
+                : shopPurchase ? <img src={shopPurchase.img} alt="" />
                 : aetherunePurchaseOpen ? <img src={aetheruneBikeArt} alt="" />
                 : bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
                 : premiumBoardPurchase ? (
@@ -190,7 +248,7 @@ export default function StartingPlaceHUD({
                     <path d="M27 21h10v6H27z" fill={premiumBoardPurchase === '25x' ? '#bf62ff' : premiumBoardPurchase === '3x' ? '#ffc21a' : '#438dff'} />
                   </svg>
                 ) : <img src={wavesArt} alt="" />}
-              <div><strong>{shopPurchase ? shopPurchase.name : aetherunePurchaseOpen ? 'Aetherune Bike' : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {shopPurchase ? shopPurchase.price : aetherunePurchaseOpen ? '699' : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
+              <div><strong>{showTeleportPurchase ? 'Teleport Back' : winsPurchaseOpen ? '2x Wins' : shopPurchase ? shopPurchase.name : aetherunePurchaseOpen ? 'Aetherune Bike' : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {showTeleportPurchase ? '9' : winsPurchaseOpen ? '75' : shopPurchase ? shopPurchase.price : aetherunePurchaseOpen ? '699' : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
             </div>
             <div className="robux-offer"><span><b>⬡</b> {bigOffer ? '1,000' : '500'} <del><b>⬡</b> {bigOffer ? '800' : '400'}</del></span><strong>{bigOffer ? '$9.99' : '$4.99'}</strong></div>
             <button className="purchase-buy" onClick={() => showMessage('Purchases are not available yet.')}>Buy</button>
@@ -232,6 +290,7 @@ export default function StartingPlaceHUD({
       <Art src={pack10mArt} box={BOX.pack10m} label="+10M speed" onClick={soon('The +10M speed pack is coming soon.')} />
 
       {toast && <div className="game-toast" role="status">{toast}</div>}
+      {banner && <div key={banner.id} className="reward-banner" role="status" data-text={banner.text}>{banner.text}</div>}
     </div>
   );
 }

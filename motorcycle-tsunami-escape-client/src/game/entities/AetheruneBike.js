@@ -1,8 +1,11 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import modelUrl from '../../assets/aetherune-midnight-starfall.glb?url';
+import { addWheelPivots } from './wheelSpin.js';
 
 const TARGET_LENGTH = 2.6;
+// The model is one piece; its wheels, measured in its own coordinates (length along X, axle along Z).
+const WHEELS = [{ x: -0.64, y: -0.09, r: 0.29, halfWidth: 0.14 }, { x: 0.467, y: -0.35, r: 0.24, halfWidth: 0.14 }];
 let modelPromise;
 
 function loadBikeModel() {
@@ -11,6 +14,7 @@ function loadBikeModel() {
       // The source model's length runs along +X. Turn it to the game's -Z forward axis.
       const oriented = new THREE.Group();
       scene.rotation.y = Math.PI / 2;
+      addWheelPivots(scene, WHEELS);
       oriented.add(scene);
       oriented.updateMatrixWorld(true);
 

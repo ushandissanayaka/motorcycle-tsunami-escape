@@ -243,12 +243,17 @@ export function createBlockyHuman() {
   const sole = solid(0xf2f2f4, { roughness: 0.8, emissive: 0xffffff, emissiveIntensity: 0.2 });
 
   // Legs in a seated pose: thigh forward, shin down, sneaker at the end.
+  // `breakPart` marks the pieces a wave breaks the rider into (see Shatter.js): each leg, arm, the head and
+  // the helmet come off whole; 'show' ones land facing the camera, so the player sees their face and helmet.
   for (const side of [-1, 1]) {
     const x = side * 0.3; // outside the bike shell
-    human.add(box(0.28, 0.28, 0.5, pants, x, -0.14, -0.22));
-    human.add(box(0.28, 0.3, 0.28, pants, x, -0.43, -0.33));
-    human.add(box(0.3, 0.14, 0.42, shoe, x, -0.65, -0.4));
-    human.add(box(0.31, 0.04, 0.43, sole, x, -0.72, -0.4));
+    const leg = new THREE.Group();
+    leg.userData.breakPart = true;
+    leg.add(box(0.28, 0.28, 0.5, pants, x, -0.14, -0.22));
+    leg.add(box(0.28, 0.3, 0.28, pants, x, -0.43, -0.33));
+    leg.add(box(0.3, 0.14, 0.42, shoe, x, -0.65, -0.4));
+    leg.add(box(0.31, 0.04, 0.43, sole, x, -0.72, -0.4));
+    human.add(leg);
   }
 
   // Upper body leans slightly toward the handlebars.
@@ -257,20 +262,23 @@ export function createBlockyHuman() {
   human.add(upper);
   upper.add(box(0.6, 0.6, 0.32, shirt, 0, 0.3, 0));
 
-  // Head, with the face on its front (-Z) side.
+  // Head, with the face on its front (-Z) side; sunglasses and hair go with it.
   const headY = 0.82;
+  const headGroup = new THREE.Group();
+  headGroup.userData.breakPart = 'show';
+  upper.add(headGroup);
   const face = textured(faceTexture(), 0.35, 0.5);
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.4, 0.4), [skin, skin, skin, skin, skin, face]); // +x -x +y -y +z -z
   head.position.y = headY;
-  upper.add(head);
+  headGroup.add(head);
 
   // Sunglasses: black frame across the eyes with two blue lenses and arms back to the helmet.
   const frame = solid(0x0d0d10, { roughness: 0.3, metalness: 0.3 });
   const lens = new THREE.MeshStandardMaterial({ map: lensTexture(), roughness: 0.1, metalness: 0.4, emissive: 0xffffff, emissiveMap: lensTexture(), emissiveIntensity: 0.55 });
-  upper.add(box(0.44, 0.1, 0.03, frame, 0, headY + 0.045, -0.215));
+  headGroup.add(box(0.44, 0.1, 0.03, frame, 0, headY + 0.045, -0.215));
   for (const side of [-1, 1]) {
-    upper.add(box(0.17, 0.065, 0.012, lens, side * 0.1, headY + 0.042, -0.234));
-    upper.add(box(0.02, 0.03, 0.2, frame, side * 0.215, headY + 0.07, -0.12));
+    headGroup.add(box(0.17, 0.065, 0.012, lens, side * 0.1, headY + 0.042, -0.234));
+    headGroup.add(box(0.02, 0.03, 0.2, frame, side * 0.215, headY + 0.07, -0.12));
   }
 
   // Curly brown hair where the helmet doesn't cover it: curls spilling out at the temples, and at the sides and nape.
@@ -284,14 +292,17 @@ export function createBlockyHuman() {
     [0.235, headY - 0.12, 0.06, 0.04, 0.1, 0.14],
     [0, headY - 0.2, 0.225, 0.42, 0.07, 0.06],
   ];
-  for (const [x, y, z, w, h, d] of curls) upper.add(box(w, h, d, hair, x, y, z));
+  for (const [x, y, z, w, h, d] of curls) headGroup.add(box(w, h, d, hair, x, y, z));
 
-  upper.add(createHelmet(headY));
+  const helmet = createHelmet(headY);
+  helmet.userData.breakPart = 'show';
+  upper.add(helmet);
 
   // Arms reach forward to the handlebars: green sleeve, white trim, then a bare forearm and hand.
   const arms = [];
   for (const side of [-1, 1]) {
     const shoulder = new THREE.Group();
+    shoulder.userData.breakPart = true;
     shoulder.position.set(side * 0.43, 0.5, 0);
     shoulder.rotation.x = 1.1;
     shoulder.add(box(0.28, 0.32, 0.3, shirt, 0, -0.16, 0));

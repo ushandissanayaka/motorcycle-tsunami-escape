@@ -150,12 +150,24 @@ export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60) {
   data.yaw += (data.yawTarget - data.yaw) * ease(VIEW_RATE);
   data.pitch += (data.pitchTarget - data.pitch) * ease(VIEW_RATE);
 
-  // The point the camera follows and looks at: the rider (or a shop focus point), smoothed.
+  // The point the camera follows and looks at: the rider (or a shop focus point). Sideways and forward it is
+  // locked to the goal: chasing a moving rider with an eased lag makes that lag depend on each frame's
+  // length (it is about speed * (1 / rate - frame / 2)), so every uneven frame shifted the bike on screen,
+  // more the faster it rode, which read as the bike shaking. Only a switch of goal (to or from a shop focus
+  // point) is eased, as an offset that decays toward the new goal and never depends on the goal's speed.
   const goal = data.focusPoint ?? target.position;
-  if (!data.focus || data.focus.distanceTo(goal) > SNAP_DISTANCE) data.focus = goal.clone();
-  const follow = ease(FOLLOW_RATE);
-  data.focus.x += (goal.x - data.focus.x) * follow;
-  data.focus.z += (goal.z - data.focus.z) * follow;
+  data.focusOffset ??= new THREE.Vector3();
+  if (!data.focus || data.focus.distanceTo(goal) > SNAP_DISTANCE) {
+    data.focus = goal.clone();
+    data.focusOffset.set(0, 0, 0);
+    data.focusGoal = goal;
+  } else if (data.focusGoal !== goal) {
+    data.focusOffset.set(data.focus.x - goal.x, 0, data.focus.z - goal.z);
+    data.focusGoal = goal;
+  }
+  data.focusOffset.multiplyScalar(1 - ease(FOLLOW_RATE));
+  data.focus.x = goal.x + data.focusOffset.x;
+  data.focus.z = goal.z + data.focusOffset.z;
   data.focus.y += (goal.y - data.focus.y) * ease(FOLLOW_RATE_VERTICAL);
 
   // Zooming out also raises the camera faster than it pulls back, tilting the view toward top-down.
@@ -170,12 +182,20 @@ export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60) {
   const flat = radius * Math.cos(pitch);
   data.desired ??= new THREE.Vector3();
   const desired = data.desired.set(flat * Math.sin(yaw), radius * Math.sin(pitch), flat * Math.cos(yaw)).add(data.focus);
-  // Keep the camera out of the canyon wall when the rider is near an edge.
+  // Keep the camera out of the canyon wall when the rider is near an edge. Only that push is eased; the
+  // camera itself stays rigidly on its offset from the focus (easing the whole position would add a second
+  // frame-length-dependent lag behind a moving rider, see above).
   const inside = clampToMap(desired.x, desired.z, 1.5);
-  desired.x = inside.x;
-  desired.z = inside.z;
-  if (camera.position.distanceTo(desired) > SNAP_DISTANCE * 2) camera.position.copy(desired);
-  else camera.position.lerp(desired, ease(CAMERA_CATCH_RATE));
+  data.edgePush ??= new THREE.Vector3();
+  const pushX = inside.x - desired.x;
+  const pushZ = inside.z - desired.z;
+  if (camera.position.distanceTo(desired) > SNAP_DISTANCE * 2) data.edgePush.set(pushX, 0, pushZ);
+  else {
+    const catchUp = ease(CAMERA_CATCH_RATE);
+    data.edgePush.x += (pushX - data.edgePush.x) * catchUp;
+    data.edgePush.z += (pushZ - data.edgePush.z) * catchUp;
+  }
+  camera.position.set(desired.x + data.edgePush.x, desired.y, desired.z + data.edgePush.z);
   data.lookAt ??= new THREE.Vector3();
   camera.lookAt(data.lookAt.copy(data.focus).add(LOOK_OFFSET));
 }

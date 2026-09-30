@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawBuxCoin } from '../util/buxIcon.js';
 
 export const SIGN_FONT = '"Montserrat", "Arial Black", Arial, sans-serif';
 
@@ -7,7 +8,8 @@ export const SIGN_FONT = '"Montserrat", "Arial Black", Arial, sans-serif';
  * `width` x `height` is its size in world units, `fontSize` is in world units too. `color` may be a
  * [top, bottom] pair for a vertical gradient.
  */
-export function signSprite(text, { fontSize, color, strokeColor, strokeEm, width, height }) {
+/** `bux`: a price in Bux, drawn with the Bux coin in front of the text. */
+export function signSprite(text, { fontSize, color, strokeColor, strokeEm, width, height, bux = false }) {
   const pxPerUnit = 80;
   const canvas = document.createElement('canvas');
   canvas.width = Math.min(4096, Math.round(width * pxPerUnit));
@@ -23,8 +25,17 @@ export function signSprite(text, { fontSize, color, strokeColor, strokeEm, width
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.lineJoin = 'round';
-    const x = canvas.width / 2;
+    let x = canvas.width / 2;
     const y = canvas.height / 2;
+    if (bux) {
+      // The coin and the text, centred together; the coin is a touch taller than the digits.
+      const coin = px * 0.92;
+      const gap = px * 0.16;
+      const textWidth = ctx.measureText(text).width;
+      const left = x - (coin + gap + textWidth) / 2;
+      drawBuxCoin(ctx, left + coin / 2, y, coin / 2);
+      x = left + coin + gap + textWidth / 2;
+    }
     ctx.strokeStyle = strokeColor;
     ctx.lineWidth = px * strokeEm;
     ctx.strokeText(text, x, y + px * 0.06); // soft drop shadow under the outline

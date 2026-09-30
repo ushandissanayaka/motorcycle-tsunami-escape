@@ -316,5 +316,17 @@ export function createBlockyHuman() {
     if (child.isMesh) child.castShadow = true;
   });
   human.userData.arms = arms;
+  /**
+   * The player's Bloxity avatar proportions: `height` scales the whole rider (about the hips, so they stay
+   * on the seat) and `headScale` the head and helmet (about the head's middle). Others are not used here.
+   */
+  human.userData.setProportions = ({ height = 1, headScale = 1 } = {}) => {
+    human.scale.setScalar(THREE.MathUtils.clamp(height, 0.5, 1.6));
+    const head = THREE.MathUtils.clamp(headScale, 0.3, 2.6);
+    for (const part of [headGroup, helmet]) {
+      part.scale.setScalar(head);
+      part.position.y = headY * (1 - head);
+    }
+  };
   return human;
 }

@@ -53,6 +53,19 @@ function grantForSku(sku, profile, metadata) {
       return { ownedBikes: [...new Set([...profile.ownedBikes, 'bike_astralwing'])] };
     case BUX_SKUS.BIKE_AETHERUNE:
       return { ownedBikes: [...new Set([...profile.ownedBikes, 'bike_aetherune'])] };
+    case BUX_SKUS.TELEPORT_BACK:
+      return {}; // used up on the spot: the client puts the rider back where the wave caught them
+    case BUX_SKUS.TREADMILL_3X:
+    case BUX_SKUS.TREADMILL_9X:
+    case BUX_SKUS.TREADMILL_25X:
+    case BUX_SKUS.TREADMILL_100X: {
+      const multiplier = Number(sku.match(/\d+/)[0]);
+      return { ownedTreadmills: [...new Set([...(profile.ownedTreadmills ?? []), multiplier])] };
+    }
+    case BUX_SKUS.WINS_50:
+    case BUX_SKUS.WINS_500:
+    case BUX_SKUS.WINS_5000:
+      return { wins: profile.wins + Number(sku.match(/\d+/)[0]) };
     default:
       return null;
   }

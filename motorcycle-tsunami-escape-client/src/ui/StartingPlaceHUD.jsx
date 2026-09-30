@@ -4,7 +4,7 @@ import AccountPanel from './AccountPanel.jsx';
 import BuxIcon from './BuxIcon.jsx';
 import bloxityHead from '../assets/bloxity_head.svg';
 import { BUX_SKUS, treadmillSku } from '../bloxity/skus.js';
-import { levelTarget } from '../shared/constants.js';
+import { formatShort, levelTarget } from '../shared/constants.js';
 import './StartingPlaceHUD.css';
 
 import trophyArt from '../assets/hud/trophy.png';
@@ -245,7 +245,7 @@ export default function StartingPlaceHUD({
       {/* Top-left: trophy with the live wins count */}
       <button className="hud-btn art-btn wins-btn" style={boxStyle(BOX.trophy)} aria-label={`Wins: ${wins}`} onClick={soon(`You have ${wins.toLocaleString()} ${wins === 1 ? 'win' : 'wins'}.`)}>
         <img className="wins-trophy" src={trophyArt} alt="" draggable={false} />
-        <span className="wins-count outlined">{wins.toLocaleString()}</span>
+        <span className="wins-count outlined">{formatShort(wins)}</span>
       </button>
 
       {/* Left menu */}

@@ -294,11 +294,11 @@ const solid = (color, roughness = 0.5) =>
 
 /**
  * Treadmill-style training board (Roblox "speed pad"): lattice frame with side rails, striped deck, a monitor
- * on a stand at the +X end, a floating "Nx Speed" banner, and an animated aura (glow, speed streaks, swirling
+ * on a stand at the +X end, a floating "Nx Speed" banner (unless `banner` is false), and an animated aura (glow, speed streaks, swirling
  * wind ribbons, lightning and twinkling stars). `length` x `width` is the deck footprint and `height` scales
  * everything vertical. Position is the deck centre; the board is not rotated.
  */
-export function createTrainingBoard({ multiplier, label, style = 'blue', position, length = BOARD.length, width = BOARD.width, height = BOARD.height }) {
+export function createTrainingBoard({ multiplier, label, banner: showBanner = true, style = 'blue', position, length = BOARD.length, width = BOARD.width, height = BOARD.height }) {
   const s = STYLES[style] ?? STYLES.blue;
   const L = length;
   const W = width;
@@ -476,11 +476,13 @@ export function createTrainingBoard({ multiplier, label, style = 'blue', positio
   group.add(sparkles);
 
   // Floating banner above the monitor.
-  const ls = THREE.MathUtils.clamp(sw, 0.8, 1.7);
-  const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(label, s.label), transparent: true, depthWrite: false }));
-  banner.scale.set(4.4 * ls, 4.4 * ls * (300 / 768), 1);
-  banner.position.set(standX - 0.6, monitorY + monitorHeight / 2 + 1.0 * ls, 0);
-  group.add(banner);
+  if (showBanner) {
+    const ls = THREE.MathUtils.clamp(sw, 0.8, 1.7);
+    const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTexture(label, s.label), transparent: true, depthWrite: false }));
+    banner.scale.set(4.4 * ls, 4.4 * ls * (300 / 768), 1);
+    banner.position.set(standX - 0.6, monitorY + monitorHeight / 2 + 1.0 * ls, 0);
+    group.add(banner);
+  }
 
   const update = (time) => {
     glow.material.opacity = 0.42 + 0.14 * Math.sin(time * 3 + position.z);

@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture, mulberry32 } from '../util/textures.js';
 import { batchStatic } from '../util/staticBatch.js';
+import { formatShort } from '../../shared/constants.js';
 
 /**
  * The wave place: a long run of black asphalt slabs, level with the road,
@@ -41,6 +42,9 @@ const DASH_SPACING = 8;
 const SURFACE = 0.1; // height of the road surface, which the slab tops are flush with
 // Red mats pay double but only open at this level; yellow mats can be returned from level 1.
 export const RED_REWARD_LEVEL = 100;
+// A yellow mat worth more than this shows just its trophy, not its count: the count is told in a message
+// when the rider collects it (see App.jsx).
+export const HIDDEN_COUNT_OVER = 100;
 // Yellow wins per pit: 1, 3, 8, 20 (as in the reference), then on at the same x2.5 pace. Red is double.
 const yellowWins = (pit) => {
   let wins = 1;
@@ -114,9 +118,13 @@ function drawOutlinedText(ctx, text, x, y, size, fill, maxWidth) {
   ctx.fillText(text, x, y, maxWidth);
 }
 
-/** "+N Wins" over a flat gold trophy on a soft yellow glow band. */
-function createRewardLabel(wins) {
+/** "+N Wins" (kept short: 18.7M) over a flat gold trophy on a soft yellow glow band, or the trophy alone. */
+function createRewardLabel(wins, showCount = true) {
   const texture = canvasTexture(512, 256, (ctx) => {
+    if (!showCount) {
+      drawTrophy(ctx, 256, 22, 212);
+      return;
+    }
     ctx.save();
     ctx.filter = 'blur(10px)';
     const band = ctx.createLinearGradient(0, 0, 512, 0);
@@ -131,7 +139,7 @@ function createRewardLabel(wins) {
     const text = ctx.createLinearGradient(0, 96, 0, 176);
     text.addColorStop(0, '#fff46a');
     text.addColorStop(1, '#ffbf1c');
-    drawOutlinedText(ctx, `+${wins} ${wins === 1 ? 'Win' : 'Wins'}`, 256, 136, 96, text, 480);
+    drawOutlinedText(ctx, `+${formatShort(wins)} ${wins === 1 ? 'Win' : 'Wins'}`, 256, 136, 96, text, 480);
   });
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false }));
   sprite.scale.set(REWARD_LABEL_SIZE.width, REWARD_LABEL_SIZE.height, 1);
@@ -401,7 +409,7 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
 
         const rewardArt = new THREE.Group();
         rewardArt.position.x = -xSide * REWARD_LABEL_SIZE.inset;
-        rewardArt.add(createRewardLabel(wins));
+        rewardArt.add(createRewardLabel(wins, sideName !== 'yellow' || wins <= HIDDEN_COUNT_OVER));
         const returnLabel = createReturnLabel();
         rewardArt.add(returnLabel);
         pickup.add(rewardArt);
@@ -501,13 +509,20 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
     redUniforms.uRedLength.value = active ? (zStart - frontierZ) * 2 : RED_FADE_LENGTH;
   };
 
-  const rewardAt = (position) => rewards.find((reward) => (
-    !reward.claimed
-    && riderLevel >= reward.requiredLevel
-    && Math.abs(position.x - reward.x) <= reward.halfX
+  const standsOn = (reward, position) => (
+    Math.abs(position.x - reward.x) <= reward.halfX
     && Math.abs(position.z - reward.z) <= reward.halfZ
     && position.y >= reward.floor - 0.3
     && position.y <= reward.floor + 0.9
+  );
+
+  const rewardAt = (position) => rewards.find((reward) => (
+    !reward.claimed && riderLevel >= reward.requiredLevel && standsOn(reward, position)
+  )) ?? null;
+
+  /** The reward under the rider that their level cannot collect yet (a red mat below RED_REWARD_LEVEL), or null. */
+  const lockedRewardAt = (position) => rewards.find((reward) => (
+    !reward.claimed && riderLevel < reward.requiredLevel && standsOn(reward, position)
   )) ?? null;
 
   const collectReward = (id) => {
@@ -535,7 +550,7 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
   };
 
   return {
-    group, solids, pits, surfaces, rewards, rewardAt, collectReward, restoreReward, setRiderLevel,
+    group, solids, pits, surfaces, rewards, rewardAt, lockedRewardAt, collectReward, restoreReward, setRiderLevel,
     setWarning, update,
     get zEnd() { return frontierZ; },
   };

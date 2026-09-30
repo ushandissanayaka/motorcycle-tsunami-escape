@@ -4,6 +4,7 @@ import scooterUrl from '../../assets/green-delivery-scooter.glb?url';
 import { createBike } from './Bike.js';
 import { createStoreBike } from './StoreBikes.js';
 import { createBlockyHuman } from './BlockyHuman.js';
+import { addWheelPivots, createWheelSpinner } from './wheelSpin.js';
 
 // Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
 const VISUAL_SCALE = 1.2;
@@ -19,6 +20,15 @@ const SHOULDER_UP = 0.5;
 const ARM_REACH = 0.58;
 const UPRIGHT = 0.12;
 const MAX_LEAN = 0.95;
+// On a training board the bike trembles a little as its wheels spin against the belt: RUMBLE_LIFT units of
+// bounce and RUMBLE_ROLL / RUMBLE_PITCH radians of rock, eased in and out at RUMBLE_EASE per second. The
+// frequencies (radians per second) stay well under half the frame rate, so the tremble reads as a tremble.
+const RUMBLE_LIFT = 0.022;
+const RUMBLE_ROLL = 0.012;
+const RUMBLE_PITCH = 0.008;
+const RUMBLE_EASE = 8;
+// The scooter GLB is one piece; its wheels, measured in its own coordinates (length along X, axle along Z).
+const SCOOTER_WHEELS = [{ x: -0.653, y: -0.46, r: 0.27, halfWidth: 0.11 }, { x: 0.517, y: -0.46, r: 0.27, halfWidth: 0.11 }];
 
 let scooterModelPromise;
 
@@ -39,6 +49,7 @@ function loadScooterModel() {
     scooterModelPromise = new GLTFLoader().loadAsync(scooterUrl).then(({ scene }) => {
       const scooter = new THREE.Group();
       scene.add(createHeadlight());
+      addWheelPivots(scene, SCOOTER_WHEELS);
       // The supplied GLB's front points along -X; turn it to the game's -Z forward direction
       // so the handlebar sits in front of the rider's hands.
       scene.rotation.set(0, -Math.PI / 2, 0);
@@ -128,20 +139,26 @@ export function createPlayer() {
   visual.position.y = VISUAL_GROUND_OFFSET;
   group.add(visual);
 
+  // Bike and rider together, trembled by `rumble` without disturbing the lean and ledge offset on `visual`.
+  const body = new THREE.Group();
+  visual.add(body);
+
   let bikeId = 'bike_scooter';
   let bike = createBikeModel(bikeId);
-  visual.add(bike);
+  body.add(bike);
+  let spinner = null; // made on first use, so other riders' bikes (never spun) get no blur discs
 
   const rider = createBlockyHuman();
-  visual.add(rider);
+  body.add(rider);
   seatRider(rider, bike);
 
   group.userData.setBikeModel = (nextBikeId) => {
     if (!nextBikeId || nextBikeId === bikeId) return;
-    visual.remove(bike);
+    body.remove(bike);
     bikeId = nextBikeId;
     bike = createBikeModel(bikeId);
-    visual.add(bike);
+    spinner = null;
+    body.add(bike);
     seatRider(rider, bike);
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
@@ -149,8 +166,23 @@ export function createPlayer() {
   group.userData.setLean = (angle) => { visual.rotation.z = angle; };
   // Holds the visible bike a little below / above the physics position while it eases onto a ledge.
   group.userData.setVisualOffset = (y) => { visual.position.y = VISUAL_GROUND_OFFSET + y; };
-  group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) =>
-    bike.userData.spinWheels?.(distance, deltaSeconds, trainingMultiplier);
+  group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) => {
+    spinner ??= createWheelSpinner(bike);
+    spinner(distance, deltaSeconds, trainingMultiplier);
+  };
+  // `strength` 0..1 (1 on a training board); `time` is the running clock in seconds.
+  let rumble = 0;
+  group.userData.rumble = (strength, deltaSeconds, time) => {
+    rumble += (strength - rumble) * (1 - Math.exp(-RUMBLE_EASE * deltaSeconds));
+    if (rumble < 1e-3) {
+      body.position.y = 0;
+      body.rotation.set(0, 0, 0);
+      return;
+    }
+    body.position.y = rumble * RUMBLE_LIFT * (0.6 * Math.sin(time * 61) + 0.4 * Math.sin(time * 97 + 1));
+    body.rotation.z = rumble * RUMBLE_ROLL * Math.sin(time * 73 + 2);
+    body.rotation.x = rumble * RUMBLE_PITCH * Math.sin(time * 53 + 4);
+  };
 
   return group;
 }

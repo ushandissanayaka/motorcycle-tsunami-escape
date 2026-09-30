@@ -71,18 +71,47 @@
   font-size: calc(40 * var(--u)); line-height: 1.25; white-space: normal;
 }
 
+/* "You received N Wins!": gold letters (yellow to orange) on a heavy dark outline, popping in across the top. */
+.reward-banner {
+  position: absolute; z-index: 8; top: calc(150 * var(--u)); left: 50%; transform: translateX(-50%);
+  font-size: calc(76 * var(--u)); line-height: 1.1; white-space: nowrap; pointer-events: none;
+  color: #1b1206; -webkit-text-stroke: calc(14 * var(--u)) #1b1206; /* the outline... */
+  animation: reward-banner 2.8s ease-out both;
+}
+.reward-banner::after { /* ...and the gold letters over it, a copy of the text */
+  content: attr(data-text); position: absolute; inset: 0; -webkit-text-stroke: 0;
+  background: linear-gradient(#fff15a 25%, #ffb300 80%); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+@keyframes reward-banner {
+  0% { opacity: 0; transform: translateX(-50%) scale(.4); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1.08); }
+  20% { transform: translateX(-50%) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(calc(-20 * var(--u))); }
+}
+
+/* Teleport Back: centred just above the speed readout, popping in when a wave breaks the rider apart. */
+.teleport-back-btn {
+  left: calc(50% - 212 * var(--u)); bottom: calc(244 * var(--u)); width: calc(424 * var(--u)); height: calc(100 * var(--u));
+  overflow: visible; animation: teleport-back-in .35s cubic-bezier(.3, 1.6, .5, 1) both, teleport-back-pulse 1.4s ease-in-out .35s infinite;
+}
+.teleport-back-btn img { display: block; width: 100%; height: 100%; pointer-events: none; user-select: none; }
+@keyframes teleport-back-in { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes teleport-back-pulse { 50% { transform: scale(1.045); } }
+
 /* Disable Waves item purchase screen */
 .purchase-overlay {
   position: fixed; z-index: 20; inset: 0; display: grid; place-items: center;
   background: rgb(0 0 0 / 78%); pointer-events: auto; font-family: Arial, Helvetica, sans-serif;
 }
 .purchase-spinner {
-  position: absolute; width: min(660px, 72vw, 78vh); overflow: visible;
-  animation: purchase-spin 4s linear infinite;
+  position: absolute; width: min(660px, 72vw, 78vh); overflow: visible; fill: #fff;
+  /* The tail (the path starts at 3 o'clock, CSS's 90deg) fades in toward the bright head at 300deg. */
+  -webkit-mask-image: conic-gradient(from 90deg, transparent 0deg, rgb(0 0 0 / 35%) 140deg, #000 290deg);
+  mask-image: conic-gradient(from 90deg, transparent 0deg, rgb(0 0 0 / 35%) 140deg, #000 290deg);
+  will-change: transform; /* spun on the compositor, never repainted */
+  animation: purchase-spin 1.3s linear infinite;
 }
-.purchase-spinner-track, .purchase-spinner-arc { fill: none; stroke-width: 7; }
-.purchase-spinner-track { stroke: rgb(255 255 255 / 24%); }
-.purchase-spinner-arc { stroke: #fff; stroke-dasharray: 64 219; stroke-linecap: round; }
 @keyframes purchase-spin { to { transform: rotate(360deg); } }
 .purchase-dialog {
   position: relative; width: min(458px, calc(100vw - 32px)); box-sizing: border-box; padding: 17px 20px 18px;
@@ -97,6 +126,7 @@
 .purchase-item { display: flex; align-items: center; gap: 12px; height: 87px; }
 .purchase-item img { width: 68px; height: 68px; object-fit: contain; }
 .purchase-bike-icon { display: grid; width: 68px; height: 68px; place-items: center; font-size: 43px; filter: drop-shadow(0 2px 3px #0008); }
+.purchase-teleport-icon { width: 68px; height: 68px; filter: drop-shadow(0 2px 3px #0008); }
 .purchase-treadmill-icon { width: 68px; height: 68px; filter: drop-shadow(0 2px 3px #0008); }
 .purchase-item div { display: grid; gap: 5px; font-size: 14px; }
 .purchase-item span { display: flex; align-items: center; gap: 6px; color: #f2f2f4; }

@@ -58,7 +58,8 @@ function profile(points, width, material, { bevel = 0.06, x = 0 } = {}) {
 /** Wheel with its axle along X, centred at the origin. `disc` gives a solid Tron-style disc. */
 function wheel({ r, width = 0.16, tire = BLACK, rim = METAL, glow = null, spokes = 0, knobby = false, disc = null }) {
   const g = new THREE.Group();
-  g.userData.wheelRadius = r; // lets a ridden copy roll its wheels (see createStoreBike)
+  g.userData.wheelRadius = r; // lets a ridden copy roll its wheels (see wheelSpin.js)
+  g.userData.halfWidth = width * 0.65; // just outside a disc face, where the spin blur goes
   const tireGeometry = new THREE.TorusGeometry(r - width / 2, width / 2, 10, 32);
   tireGeometry.rotateY(Math.PI / 2);
   g.add(mesh(tireGeometry, mat(tire, { roughness: 0.85, metalness: 0.05 })));
@@ -356,24 +357,13 @@ const LIGHT_CYCLE_FIT = { hips: [1.16, 0.2], bars: [1.26, -0.36] };
 /**
  * The model of a store bike. The same model is what a rider rides once they take it, so every model says
  * where the rider sits (`userData.rideFit`: hips just above the seat and the handlebar grips, as [y, z]
- * with the front toward -Z) and can roll its wheels (`userData.spinWheels`).
+ * with the front toward -Z); its wheels carry `userData.wheelRadius` so a ridden copy can roll them (see
+ * wheelSpin.js).
  */
 export function createStoreBike(id) {
   const build = SPECS[id];
   if (!build) throw new Error(`No store model for bike "${id}"`);
   const bike = build();
   if (id === 'bike_azure') bike.userData.rideFit = LIGHT_CYCLE_FIT;
-  if (!bike.userData.spinWheels) {
-    const wheels = [];
-    bike.traverse((object) => { if (object.userData.wheelRadius) wheels.push(object); });
-    bike.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier = 0) => {
-      // Roll with the road; on a training board, spin in place faster on higher multipliers.
-      for (const w of wheels) {
-        w.rotation.x -= trainingMultiplier > 0
-          ? deltaSeconds * Math.min(18 + trainingMultiplier * 2, 120)
-          : distance / w.userData.wheelRadius;
-      }
-    };
-  }
   return bike;
 }

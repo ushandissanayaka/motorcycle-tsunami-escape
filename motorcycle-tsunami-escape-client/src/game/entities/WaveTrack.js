@@ -2,13 +2,14 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PALETTES, applyWorldUV, makePaverTexture, makeStudTexture, mulberry32 } from '../util/textures.js';
 import { batchStatic } from '../util/staticBatch.js';
-import { formatShort } from '../../shared/constants.js';
+import { formatShort, waveGapLength, waveSlabLength } from '../../shared/constants.js';
 
 /**
  * The wave place: a long run of black asphalt slabs, level with the road,
  * separated by pits with a grey paved floor. The pits get longer the
  * further you go (`WAVE_TRACK.gapGrowth`), so riders have to clear bigger and
- * bigger gaps; a pit is a real drop (`WAVE_TRACK.pitDepth`) but a safe one: a bike
+ * bigger gaps, and the slabs lengthen faster still (see waveSlabLength), so the pits, a rider's only shelter
+ * from a wave, get further and further apart; a pit is a real drop (`WAVE_TRACK.pitDepth`) but a safe one: a bike
  * that misses lands unharmed on the floor and gets out by jumping at the wall. Slabs carry a yellow dashed
  * centre line, pits have a red trophy mat along the west wall and a yellow one along the east wall
  * (down on their floor, running lengthwise, against lavender pit walls), and pink-lavender curbs edge
@@ -219,7 +220,7 @@ uniform float uRedLength;`)
   return material;
 }
 
-export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstGap, gapGrowth, pitDepth }) {
+export function createWaveTrack({ x0, x1, zStart, pitDepth, ...track }) {
   const group = new THREE.Group();
   const width = x1 - x0;
   const centerX = (x0 + x1) / 2;
@@ -306,7 +307,14 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
   // Only the ones near the rider exist at a time (see `update`), whichever way the rider is going,
   // including straight back to the start after a tsunami catches them or they collect a reward.
   /** South (entrance-side) edge of segment i; segment i runs from here north to segmentStart(i + 1). */
-  const segmentStart = (i) => zStart - (i * (slabLength + firstGap) + ((slabGrowth + gapGrowth) * i * (i - 1)) / 2);
+  const starts = [zStart]; // worked out once each, as far along as the rider has been
+  const segmentStart = (i) => {
+    while (starts.length <= i) {
+      const k = starts.length - 1;
+      starts.push(starts[k] - waveSlabLength(k, track) - waveGapLength(k, track));
+    }
+    return starts[i];
+  };
   const built = new Map(); // segment index -> { meshGroup, solid, pit, surfaces, rewards }
   const claimedRewards = new Set(); // reward ids collected and not yet restored, kept across rebuilds
 
@@ -327,7 +335,7 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
     const wallTops = [-1, 1].map((side, sideIndex) => (
       SIDE_WALL_MIN_TOP + (0.5 + 0.5 * Math.sin(i * 1.7 + sideIndex * 2.3)) * SIDE_WALL_TOP_RANGE
     ));
-    const length = slabLength + slabGrowth * i; // slabs get longer, so the pits get further apart
+    const length = waveSlabLength(i, track); // slabs get longer and longer, so the pits get further apart
     const zBack = z - length;
     const midZ = (z + zBack) / 2;
 
@@ -364,7 +372,7 @@ export function createWaveTrack({ x0, x1, zStart, slabLength, slabGrowth, firstG
 
     // The pit after each slab: the next segment can be generated before the rider reaches it.
     {
-      const gap = firstGap + gapGrowth * i;
+      const gap = waveGapLength(i, track);
       const gapMid = z - gap / 2;
       const pit = { minX: x0, maxX: x1, minZ: z - gap, maxZ: z, floor: -pitDepth };
       pits.push(pit);

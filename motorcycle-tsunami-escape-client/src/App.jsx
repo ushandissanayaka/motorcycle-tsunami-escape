@@ -159,6 +159,7 @@ export default function App() {
     let speedPopupAccum = 0;
     let lastSpeedPopupTime = 0;
     const SPEED_POPUP_INTERVAL = 0.35; // seconds between popups, so one shows per short burst of driving instead of every frame
+    const SPEED_POPUP_UNTIL = 1000; // the shoe popups only show while the rider's speed is at most this
 
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer) return;
@@ -319,6 +320,7 @@ export default function App() {
       }
       if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
       const nowSeconds = now / 1000;
+      if (speedProgress > SPEED_POPUP_UNTIL) speedPopupAccum = 0;
       if (speedPopupAccum > 0 && nowSeconds - lastSpeedPopupTime > SPEED_POPUP_INTERVAL) {
         world.speedPopups.spawn(world.player.position, SPEED_POPUP_VALUE, nowSeconds, camera.userData.yaw);
         speedPopupAccum = 0;

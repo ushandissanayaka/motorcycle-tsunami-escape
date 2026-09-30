@@ -27,23 +27,33 @@ export function applyLevelProgress(levelProgress, earnedSpeed, riderLevel) {
 
 /**
  * The wave place: black slabs level with the road, separated by deep grey pits.
- * Every pit is `gapGrowth` longer than the one before it, so the jumps get harder,
- * and every slab is `slabGrowth` longer than the one before it, so the pits get
- * further apart. `pitDepth` is more than a bike can drive up out of, but a jump clears it.
+ * Every pit is `gapGrowth` longer than the one before it, so the jumps get harder.
+ * The first `easySlabs` slabs are short and grow only a little (`slabGrowth` each), so the start is easy. After
+ * that each slab also grows by `hardGrowth` per step past them plus `hardCurve` per step squared, so the pits,
+ * the only shelter from a wave, get further and further apart: out there a wave arriving mid-slab leaves too
+ * little time to reach the next pit, and the rider has to turn back to the last one.
+ * `pitDepth` is more than a bike can drive up out of, but a jump clears it.
  */
 // Pits drop below the tsunami's ground-level base, leaving room for the rider
 // and bike to shelter underneath it while it crosses the track.
 // 2.8 units puts the pit floor below the 2.4-unit rider head height, with
 // extra clearance so a rider tucked into a gap stays under the tsunami.
 // The first pit (6) is wide enough for a starter bike to drop into: a rider falls past the far lip in ~0.32 s,
-// i.e. after 3-4 units at starter speed. Pits then widen by 2 and slabs lengthen by 4 per step
-// (8th pit ~20, 8th slab ~48).
-export const WAVE_TRACK = { slabs: 8, slabLength: 20, slabGrowth: 4, firstGap: 6, gapGrowth: 2, pitDepth: 2.8 };
+// i.e. after 3-4 units at starter speed. Pits then widen by 2 per step. Slabs run 20, 22, ... 48 over the first
+// 15, then 57, 66, 77, 90, 103, 118, 133, ... 209 (26th).
+export const WAVE_TRACK = { slabs: 8, slabLength: 20, slabGrowth: 2, easySlabs: 15, hardGrowth: 6, hardCurve: 0.6, firstGap: 6, gapGrowth: 2, pitDepth: 2.8 };
 
-/** Length of the whole wave place, first slab to last. */
-export function waveTrackLength({ slabs, slabLength, slabGrowth, firstGap, gapGrowth }) {
+/** Length of slab i (0 is the first), and of pit i (the one just after slab i). */
+export const waveSlabLength = (i, { slabLength, slabGrowth, easySlabs, hardGrowth, hardCurve } = WAVE_TRACK) => {
+  const past = Math.max(0, i - easySlabs + 1); // steps past the easy stretch
+  return slabLength + slabGrowth * i + hardGrowth * past + hardCurve * past * past;
+};
+export const waveGapLength = (i, { firstGap, gapGrowth } = WAVE_TRACK) => firstGap + gapGrowth * i;
+
+/** Length of the wave place's first `slabs` slabs and the pits between them. */
+export function waveTrackLength(track) {
   const sum = (count, f) => Array.from({ length: count }, (_, i) => f(i)).reduce((a, b) => a + b, 0);
-  return sum(slabs, (i) => slabLength + slabGrowth * i) + sum(slabs - 1, (i) => firstGap + gapGrowth * i);
+  return sum(track.slabs, (i) => waveSlabLength(i, track)) + sum(track.slabs - 1, (i) => waveGapLength(i, track));
 }
 
 const ROOM_NORTH = -38;

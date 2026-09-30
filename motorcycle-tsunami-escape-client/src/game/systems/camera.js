@@ -21,7 +21,8 @@ const PITCH_MIN = 0.06; // never dip below the ground
 const PITCH_MAX = 1.45; // almost straight down
 
 export function createChaseCamera(aspect) {
-  const camera = new THREE.PerspectiveCamera(60, aspect, 0.1, 2000);
+  // A wider default matches the open, pulled-back arcade view in the reference image.
+  const camera = new THREE.PerspectiveCamera(70, aspect, 0.1, 2000);
   // zoom / world-space yaw / pitch ease toward their targets. Camera yaw is independent of rider heading,
   // so turning the bike does not swing the camera around it; W / A / S / D steer relative to it (see
   // systems/movement.js). `steer` collects right-drag turning.

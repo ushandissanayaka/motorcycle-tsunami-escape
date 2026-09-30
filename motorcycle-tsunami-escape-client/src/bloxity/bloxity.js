@@ -154,6 +154,18 @@ export function setFullscreen(on) {
 // ---- Avatar ---------------------------------------------------------------------------------------------
 
 export const showAvatarCustomizer = () => sdk()?.avatar?.showCustomizer?.();
-/** { height, headScale, ... } (all 1 by default), or null without the SDK. */
-export const getProportions = () => sdk()?.avatar?.getProportions?.() ?? null;
+/**
+ * The player's avatar as a rider is dressed with it (see BloxityAvatar.js): { equipped (item ids by slot),
+ * proportions, skinUrl (the skin texture with face, shirt and pants drawn on) }. Without the SDK, the default avatar.
+ */
+export function getAvatarSpec() {
+  const avatar = sdk()?.avatar;
+  try {
+    if (avatar) return { equipped: avatar.getEquipped?.() ?? {}, proportions: avatar.getProportions?.() ?? {}, skinUrl: avatar.getSkinTextureUrl?.() };
+  } catch {
+    // Fall through to the default avatar.
+  }
+  return { equipped: {}, proportions: {} };
+}
+export const onAvatarChanged = (listener) => sdk()?.avatar?.onAvatarChanged?.(listener) ?? noop;
 export const onProportionsChanged = (listener) => sdk()?.avatar?.onProportionsChanged?.(listener) ?? noop;

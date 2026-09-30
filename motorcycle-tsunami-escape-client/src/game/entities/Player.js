@@ -6,6 +6,7 @@ import { createStoreBike } from './StoreBikes.js';
 import { createBlockyHuman } from './BlockyHuman.js';
 import { addWheelPivots, createWheelSpinner } from './wheelSpin.js';
 import { createNameTag } from './NameTag.js';
+import { buildAvatarRider, loadAvatar, queueBuild } from './BloxityAvatar.js';
 
 // Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
 const VISUAL_SCALE = 1.2;
@@ -132,7 +133,10 @@ function seatRider(rider, bike) {
   for (const arm of rider.userData.arms) arm.rotation.x = pitch + lean;
 }
 
-/** Blocky rider on the currently equipped bike. The starter scooter is loaded from its textured GLB. */
+/**
+ * A rider on the currently equipped bike. The starter scooter is loaded from its textured GLB. The rider is the
+ * player's Bloxity avatar (setAvatar) once it has loaded; until then, or if it can't load, a blocky stand-in.
+ */
 export function createPlayer() {
   const group = new THREE.Group();
   const visual = new THREE.Group();
@@ -153,6 +157,24 @@ export function createPlayer() {
   body.add(rider);
   seatRider(rider, bike);
 
+  // The Bloxity avatar: `avatar` is what it is made of (loaded once per look), `avatarRider` its baked, seated
+  // copy on the current bike (rebuilt when the bike or the proportions change).
+  let avatar = null;
+  let avatarRider = null;
+  let proportions = {};
+  let avatarRequest = 0; // the latest setAvatar: an older one finishing late is dropped
+  const seatAvatar = () => {
+    if (!avatar) return;
+    const next = buildAvatarRider(avatar, { proportions, fit: bike.userData.rideFit });
+    if (avatarRider) {
+      body.remove(avatarRider.root);
+      avatarRider.dispose();
+    }
+    avatarRider = next;
+    body.add(avatarRider.root);
+    rider.visible = false;
+  };
+
   group.userData.setBikeModel = (nextBikeId) => {
     if (!nextBikeId || nextBikeId === bikeId) return;
     body.remove(bike);
@@ -161,16 +183,44 @@ export function createPlayer() {
     spinner = null;
     body.add(bike);
     seatRider(rider, bike);
+    seatAvatar();
+  };
+  /**
+   * Dresses the rider as a Bloxity avatar: `spec` is { equipped, proportions, skinUrl } (see bloxity.js). It
+   * loads in the background and is baked in spare time; `now` bakes it as soon as it has loaded (the local
+   * player). Resolves once it is on the bike (or stays the blocky rider if it could not load).
+   */
+  group.userData.setAvatar = async (spec, { now = false } = {}) => {
+    const request = ++avatarRequest;
+    proportions = spec?.proportions ?? {};
+    rider.userData.setProportions(proportions);
+    let loaded;
+    try {
+      loaded = await loadAvatar(spec);
+    } catch (error) {
+      console.info('Bloxity avatar could not load; riding as the stand-in.', error?.message ?? error);
+      return;
+    }
+    if (request !== avatarRequest) return;
+    await new Promise((resolve) => (now ? resolve() : queueBuild(resolve)));
+    if (request !== avatarRequest) return;
+    avatar = loaded;
+    seatAvatar();
+  };
+  /** Frees the avatar's baked geometry (when the rider leaves for good). */
+  group.userData.dispose = () => {
+    avatarRequest += 1;
+    avatarRider?.dispose();
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
   // The player's name over the rider for a few seconds (shown when they log in).
   const nameTag = createNameTag();
   group.add(nameTag.sprite);
   group.userData.showName = (name) => nameTag.show(name);
-  // Bloxity avatar proportions on the rider (see BlockyHuman's setProportions).
-  group.userData.setProportions = (proportions) => rider.userData.setProportions(proportions);
   // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.
   group.userData.setLean = (angle) => { visual.rotation.z = angle; };
+  // Tips bike and rider to the slope they ride on (nose up positive), about the middle of the bike.
+  group.userData.setPitch = (angle) => { visual.rotation.x = angle; };
   // Holds the visible bike a little below / above the physics position while it eases onto a ledge.
   group.userData.setVisualOffset = (y) => { visual.position.y = VISUAL_GROUND_OFFSET + y; };
   group.userData.spinWheels = (distance, deltaSeconds, trainingMultiplier) => {

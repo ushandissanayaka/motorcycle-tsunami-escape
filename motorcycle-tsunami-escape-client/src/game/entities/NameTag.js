@@ -1,11 +1,11 @@
 import * as THREE from 'three';
 
 /**
- * The player's name floating over their rider for a few seconds, shown when they log in: white letters with a
- * heavy dark outline, fading in and out. It times itself as it is drawn (onBeforeRender), so it adds nothing to
- * the game loop, and it is hidden again once its time is up.
+ * A player's name floating over their rider for a few seconds when they log in, seen by them and by everyone
+ * else in the room: white letters with a heavy dark outline, fading in and out. It times itself as it is drawn
+ * (onBeforeRender), so it adds nothing to the game loop, and it is hidden again once its time is up.
  */
-const SHOW = 3; // seconds on screen
+const SHOW = 5; // seconds on screen
 const FADE_IN = 0.2;
 const FADE_OUT = 0.4;
 const HEIGHT = 3.7; // world units above the rider's feet: just over the helmet

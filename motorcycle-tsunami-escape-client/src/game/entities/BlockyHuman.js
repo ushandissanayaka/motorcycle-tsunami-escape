@@ -155,7 +155,7 @@ function box(w, h, d, material, x = 0, y = 0, z = 0) {
 }
 
 /** Open-face gaming helmet, all black, sized for the 0.42 x 0.4 x 0.4 head centred at (0, headY, 0). */
-function createHelmet(headY) {
+export function createHelmet(headY) {
   const helmet = new THREE.Group();
   const shell = solid(COLORS.shell, { roughness: 0.22, metalness: 0.5 });
   const shellEdge = solid(COLORS.trimDark, { roughness: 0.35, metalness: 0.35 });

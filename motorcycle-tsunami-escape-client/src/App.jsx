@@ -6,8 +6,14 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import { initSDK } from './bloxity/sdk.js';
-import { gameplayStart } from './bloxity/lifecycle.js';
+import {
+  applyAllSettings, authenticateWithServer, getProportions, getUser, isEmbedded, listenSetting, onPlayerEvent,
+  onProportionsChanged, onUserChanged, playerInRoom, playerJoined, purchase, setFullscreen, showPortalMenu,
+  startBloxity, updateRoom,
+} from './bloxity/bloxity.js';
+import { BUX_SKUS, treadmillSku, winsPackAmount } from './bloxity/skus.js';
+import { useBloxityAccount } from './bloxity/useBloxityAccount.js';
+import { gameplayEnd, gameplayStart, loadingEnd, loadingStep } from './bloxity/lifecycle.js';
 import { hideLoadingScreen } from './ui/loadingScreen.js';
 import { buildStartingPlace } from './game/scenes/StartingPlace.js';
 import { attachCameraControls, createChaseCamera, updateChaseCamera } from './game/systems/camera.js';
@@ -17,7 +23,7 @@ import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
 import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
 import { HIDDEN_COUNT_OVER } from './game/entities/WaveTrack.js';
 import { SPEED_POPUP_VALUE } from './game/entities/SpeedPopup.js';
-import { joinStartingPlace } from './net/colyseusClient.js';
+import { getServerHttpUrl, joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
@@ -27,7 +33,20 @@ const SESSION_PROGRESS_KEY = 'mte-session-progress';
 // jump straight there when it is further off than REMOTE_SNAP_DISTANCE (a respawn or teleport).
 const REMOTE_FOLLOW_RATE = 12;
 const REMOTE_SNAP_DISTANCE = 20;
-const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter', speed: 0, level: 1, levelProgress: 0 };
+// ownedBikes / ownedTreadmills / winsMultiplier: what Bux bought (see grantPurchase); transactions: their ids.
+const freshProfile = {
+  wins: 0, finishes: 0, selectedBike: 'bike_scooter', speed: 0, level: 1, levelProgress: 0,
+  ownedBikes: [], ownedTreadmills: [], winsMultiplier: 1, transactions: [],
+};
+const PREMIUM_BOARDS = [3, 9, 25, 100]; // training boards that are locked until bought
+// Graphics quality (the portal's graphics_quality setting): the highest pixel ratio to draw at, and whether
+// the glow pass runs. Neither needs a shader rebuilt, so switching never stalls a frame.
+const QUALITY = {
+  Low: { pixelRatio: 0.75, bloom: false },
+  Medium: { pixelRatio: 1, bloom: true },
+  High: { pixelRatio: 1.5, bloom: true },
+  Ultra: { pixelRatio: 2, bloom: true },
+};
 const effectiveBikeSpeed = (baseSpeed, speed, level) =>
   baseSpeed + Math.min(30, Math.sqrt(Math.max(0, speed)) * 0.25) + Math.min(100, Math.max(0, level - 1)) * 0.3;
 
@@ -48,6 +67,10 @@ function readProfile() {
       wins: Number.isFinite(saved.wins) ? saved.wins : freshProfile.wins,
       finishes: Number.isFinite(saved.finishes) ? saved.finishes : freshProfile.finishes,
       selectedBike: saved.selectedBike ?? freshProfile.selectedBike,
+      ownedBikes: Array.isArray(saved.ownedBikes) ? saved.ownedBikes : [],
+      ownedTreadmills: Array.isArray(saved.ownedTreadmills) ? saved.ownedTreadmills : [],
+      winsMultiplier: saved.winsMultiplier === 2 ? 2 : 1,
+      transactions: Array.isArray(saved.transactions) ? saved.transactions : [],
       ...sessionProgress,
     };
     profile.speed = Number.isFinite(profile.speed) ? Math.max(0, profile.speed) : freshProfile.speed;
@@ -79,11 +102,15 @@ export default function App() {
   const [teleportBackOffer, setTeleportBackOffer] = useState(false);
   const [winsPurchaseOpen, setWinsPurchaseOpen] = useState(false);
   const [rewardBanner, setRewardBanner] = useState(null); // { id, text }: "You received N Wins!"
+  const [serverWavesDisabled, setServerWavesDisabled] = useState(false);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
+  const teleportBackRef = useRef(() => {}); // puts the rider back where the last wave caught them (set in the game loop's effect)
+  const account = useBloxityAccount();
 
   useEffect(() => {
-    try { initSDK(); } catch (error) { console.info('Running outside Bloxity portal:', error); }
+    startBloxity();
+    loadingStep('Building the world');
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9bdcff);
@@ -113,6 +140,15 @@ export default function App() {
     // one pass, cutting a real per-frame cost that runs unconditionally regardless of scene content.
     const sizeBloom = () => bloomPass.setSize(window.innerWidth / 2, window.innerHeight / 2);
     sizeBloom();
+    const applyQuality = (name) => {
+      const quality = QUALITY[name] ?? QUALITY.High;
+      const pixelRatio = Math.min(window.devicePixelRatio, quality.pixelRatio);
+      renderer.setPixelRatio(pixelRatio);
+      composer.setPixelRatio(pixelRatio);
+      composer.setSize(window.innerWidth, window.innerHeight);
+      sizeBloom();
+      bloomPass.enabled = quality.bloom;
+    };
 
     const world = buildStartingPlace(scene, renderer);
     world.waveTrack.setRiderLevel(profileRef.current.level);
@@ -145,6 +181,18 @@ export default function App() {
     let respawnFreezeUntil = 0;
     let pendingReturn = null; // { at, rewardId }: a returned trophy's burst is playing; teleport home at `at`
     let wipeout = null; // { at }: a wave broke the rider apart; the pieces are settling, respawn at `at`
+    let deathSpot = null; // where the last wave caught the rider, for Teleport Back
+    let teleportBackRequested = false; // bought: put the rider back at deathSpot next frame
+    let respawnRequested = false; // the portal asked for a respawn: send the rider home next frame
+    teleportBackRef.current = () => { teleportBackRequested = true; };
+    // Ends a wipeout early (the wreck is cleared and the rider shown again), for a respawn or Teleport Back.
+    const endWipeout = () => {
+      if (!wipeout) return;
+      wipeout = null;
+      world.shatter.clear();
+      world.player.visible = true;
+      setTeleportBackOffer(false);
+    };
     const sendHome = () => {
       world.player.position.set(0, 0, 0);
       world.player.rotation.set(0, 0, 0);
@@ -168,12 +216,21 @@ export default function App() {
         connectToRoom();
       }, 2500);
     };
+    let joinedAs = null; // the Bloxity username the room was joined with (null: as a guest)
+    let announced = null; // session ids of the other riders Bloxity has been told about, this connection
     const connectToRoom = () => {
+      joinedAs = getUser()?.username ?? null;
+      announced = null;
+      loadingStep('Joining server');
       joinStartingPlace({
+        username: joinedAs,
         onStatus: (status) => {
           if (cancelled) return;
           setPresence((current) => ({ ...current, status }));
-          if (status === 'offline') scheduleReconnect();
+          if (status === 'offline') {
+            updateRoom('');
+            scheduleReconnect();
+          }
           if (status === 'connected' && reconnectTimer) {
             window.clearTimeout(reconnectTimer);
             reconnectTimer = null;
@@ -181,6 +238,16 @@ export default function App() {
         },
         onPlayers: (players, localSessionId) => {
           if (cancelled) return;
+          // Tell Bloxity who is here (it toasts the player's friends): the riders already in the room when
+          // joining, then each one who joins after.
+          const firstList = announced === null;
+          announced ??= new Set();
+          for (const remote of players) {
+            if (remote.sessionId === localSessionId || announced.has(remote.sessionId)) continue;
+            announced.add(remote.sessionId);
+            if (firstList) playerInRoom(remote.username);
+            else playerJoined(remote.username);
+          }
           const present = new Set();
           for (const remote of players) {
             if (remote.sessionId === localSessionId) continue;
@@ -213,7 +280,10 @@ export default function App() {
         },
       }).then((connection) => {
         if (cancelled) connection.leave();
-        else room = connection;
+        else {
+          room = connection;
+          updateRoom(connection.roomId); // friends invited now join this room
+        }
       }).catch((error) => {
         console.info('Starting Place server is not available:', error.message);
         if (!cancelled) {
@@ -224,12 +294,105 @@ export default function App() {
     };
     connectToRoom();
 
+    // Bloxity: logging in or out rejoins the room under the new name (so friends see who joined), and a
+    // logged-in player's purchases saved on this game's server are brought into this session.
+    let greetedUserId = null; // the user whose name was last shown over the rider
+    const stopWatchingUser = onUserChanged((user) => {
+      const username = user?.username ?? null;
+      // Logging in shows the player's name over their rider for a few seconds.
+      if (user && user._id !== greetedUserId) world.player.userData.showName(user.displayName || user.username);
+      greetedUserId = user?._id ?? null;
+      if (room && username !== joinedAs) {
+        room.leave(); // its onLeave reports 'offline', which reconnects with the new name
+        room = null;
+      }
+      if (!user) return;
+      authenticateWithServer(`${getServerHttpUrl()}/api/legion-auth`).then((answer) => {
+        const saved = answer?.profile;
+        if (cancelled || !saved) return;
+        setProfile((current) => ({
+          ...current,
+          ownedBikes: [...new Set([...current.ownedBikes, ...(saved.ownedBikes ?? []).filter((id) => id !== 'bike_scooter')])],
+          ownedTreadmills: [...new Set([...current.ownedTreadmills, ...(saved.ownedTreadmills ?? [])])],
+          winsMultiplier: saved.winsMultiplierActive ? 2 : current.winsMultiplier,
+        }));
+        if (saved.wavesDisabledUntil > Date.now()) {
+          world.setWavesEnabled(false);
+          setServerWavesDisabled(true);
+        }
+      });
+    });
+
+    // Bloxity avatar proportions shape the local rider.
+    const applyProportions = (proportions) => { if (proportions) world.player.userData.setProportions(proportions); };
+    applyProportions(getProportions());
+    const stopWatchingProportions = onProportionsChanged(applyProportions);
+
+    // Portal settings the game supports (registering one is what shows its control in the portal menu).
+    const fpsCounter = document.getElementById('fps-counter');
+    let showFps = false;
+    let fullscreenReady = false; // the first call only reports the current value: don't act on it
+    const stopSettings = [
+      listenSetting('graphics_quality', applyQuality),
+      listenSetting('show_fps', (value) => {
+        showFps = value === 'true';
+        if (fpsCounter) fpsCounter.hidden = !showFps;
+      }),
+      listenSetting('camera_sensitivity', (value) => {
+        const sensitivity = parseFloat(value);
+        camera.userData.sensitivity = Number.isFinite(sensitivity) ? THREE.MathUtils.clamp(sensitivity, 0.1, 5) : 1;
+      }),
+      listenSetting('fullscreen', (value) => {
+        if (fullscreenReady) setFullscreen(value === 'true');
+        fullscreenReady = true;
+      }),
+    ];
+    applyAllSettings();
+
+    // Portal player events. The game has no chat of its own, so chat messages are left to the portal.
+    const stopPlayerEvents = onPlayerEvent((event, data) => {
+      if (event === 'respawn_request') respawnRequested = true;
+      else if (event === 'pointer_lock_changed' && data === false) clearKeys();
+    });
+    // Esc opens the portal's pause menu when the game runs inside Bloxity.
+    const onEscape = (event) => {
+      if (event.key === 'Escape' && isEmbedded()) showPortalMenu();
+    };
+    window.addEventListener('keydown', onEscape);
+
+    let fpsFrames = 0;
+    let fpsSince = performance.now();
     let previous = performance.now();
     let active = true;
     const animate = (now) => {
       if (!active) return;
       const delta = Math.min((now - previous) / 1000, 0.05);
       previous = now;
+      if (showFps) {
+        fpsFrames += 1;
+        if (now - fpsSince >= 500) {
+          fpsCounter.textContent = `${Math.round((fpsFrames * 1000) / (now - fpsSince))} FPS`;
+          fpsFrames = 0;
+          fpsSince = now;
+        }
+      }
+      if (respawnRequested) {
+        respawnRequested = false;
+        endWipeout();
+        sendHome();
+        clearKeys();
+      }
+      if (teleportBackRequested) {
+        teleportBackRequested = false;
+        if (deathSpot) {
+          endWipeout();
+          sendHome(); // clears the steering and jump state...
+          world.player.position.copy(deathSpot.position); // ...then back to where the wave caught them
+          world.player.rotation.y = deathSpot.rotY;
+          world.player.userData.grounded = false; // settles onto whatever is there
+          clearKeys();
+        }
+      }
       if (pendingReturn && now >= pendingReturn.at) {
         // The burst is over: bring the trophy back so it can be collected again, teleport home and
         // hand control straight back.
@@ -260,7 +423,8 @@ export default function App() {
       const movedDistance = Math.hypot(world.player.position.x - previousX, world.player.position.z - previousZ);
       const overlappingPad = checkBoostPadOverlap(world.boostPads, world.player.position);
       const groundedOnPad = world.player.userData.grounded && world.player.position.y < 0.8;
-      const lockedPremiumBoard = [3, 9, 25, 100].includes(overlappingPad?.multiplier) && groundedOnPad;
+      const lockedPremiumBoard = PREMIUM_BOARDS.includes(overlappingPad?.multiplier) && groundedOnPad
+        && !profileRef.current.ownedTreadmills.includes(overlappingPad.multiplier);
       const trainingPad = overlappingPad && !lockedPremiumBoard && groundedOnPad
         ? overlappingPad
         : null;
@@ -283,9 +447,10 @@ export default function App() {
 
       const reward = world.player.userData.grounded && !wipeout ? world.waveTrack.rewardAt(world.player.position) : null;
       if (reward && world.waveTrack.collectReward(reward.id)) {
+        const wins = reward.wins * profileRef.current.winsMultiplier; // 2x Wins doubles every trophy
         setProfile((current) => ({
           ...current,
-          wins: current.wins + reward.wins,
+          wins: current.wins + wins,
         }));
         // Zoom back in to the normal chase view if zoomed out, burst confetti, and teleport home after it.
         if (camera.userData.zoomTarget > 1) camera.userData.zoomTarget = 1;
@@ -293,7 +458,7 @@ export default function App() {
         pendingReturn = { at: now + world.returnBursts.duration * 1000, rewardId: reward.id };
         clearKeys();
         // A big reward's count isn't on its mat (see HIDDEN_COUNT_OVER), so it is told here instead.
-        if (reward.wins > HIDDEN_COUNT_OVER) setRewardBanner({ id: now, text: `You received ${formatShort(reward.wins)} Wins!` });
+        if (reward.wins > HIDDEN_COUNT_OVER) setRewardBanner({ id: now, text: `You received ${formatShort(wins)} Wins!` });
       }
       // Driving onto a red mat this level can't collect yet offers the 2x Wins boost instead.
       const lockedReward = world.player.userData.grounded && !wipeout ? world.waveTrack.lockedRewardAt(world.player.position) : null;
@@ -344,6 +509,7 @@ export default function App() {
         camera.userData.zoomTarget = 0.4;
         setBikePurchaseOpen(true);
       }, (pad) => {
+        if (profileRef.current.ownedTreadmills.includes(pad.userData.multiplier)) return; // already bought
         camera.userData.focusPoint = new THREE.Vector3(pad.position.x, 1.8, pad.position.z);
         camera.userData.zoomTarget = 0.4;
         setPremiumBoardPurchase(`${pad.userData.multiplier}x`);
@@ -356,6 +522,7 @@ export default function App() {
       if (hitBy) {
         // Break the rider apart where the wave caught them and let the pieces settle before sending them home.
         const { x, y, z } = world.player.position;
+        deathSpot = { position: world.player.position.clone(), rotY: world.player.rotation.y };
         world.shatter.burst(world.player, world.collision.supportAt(x, z, y), camera.position, now / 1000);
         world.player.visible = false;
         wipeout = { at: now + world.shatter.duration * 1000 };
@@ -391,10 +558,12 @@ export default function App() {
     const shownBriefly = new Promise((resolve) => setTimeout(resolve, 900));
     const ready = Promise.all([whenAssetsLoaded(), document.fonts?.ready, firstFrames, shownBriefly]);
     const giveUp = new Promise((resolve) => setTimeout(resolve, 20000));
+    whenAssetsLoaded().then(() => { if (active) loadingStep('Preparing the track'); });
     Promise.race([ready, giveUp]).then(() => {
       if (!active) return;
       // With the models in, build every shader behind the loading screen, so none is built mid-ride.
       world.warmShaders(renderer, camera, composer.readBuffer, () => composer.render());
+      loadingEnd();
       gameplayStart();
       hideLoadingScreen();
     });
@@ -404,6 +573,13 @@ export default function App() {
       cancelled = true;
       if (reconnectTimer) window.clearTimeout(reconnectTimer);
       room?.leave();
+      updateRoom('');
+      gameplayEnd();
+      stopWatchingUser();
+      stopWatchingProportions();
+      stopSettings.forEach((stop) => stop());
+      stopPlayerEvents();
+      window.removeEventListener('keydown', onEscape);
       keys.dispose();
       detachCameraControls();
       detachLeaderboards();
@@ -415,8 +591,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const { wins, finishes, selectedBike } = profile;
-    sessionStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike }));
+    const { wins, finishes, selectedBike, ownedBikes, ownedTreadmills, winsMultiplier, transactions } = profile;
+    sessionStorage.setItem(SAVE_KEY, JSON.stringify({ wins, finishes, selectedBike, ownedBikes, ownedTreadmills, winsMultiplier, transactions }));
     sessionStorage.setItem(SESSION_PROGRESS_KEY, JSON.stringify({
       speed: profile.speed,
       level: profile.level,
@@ -480,6 +656,44 @@ export default function App() {
     worldRef.current?.waveTrack.setRiderLevel(profile.level);
   }, [profile.level]);
 
+  // A completed Bux purchase: keep its transaction id and hand over what was bought. (For a logged-in player
+  // the server's webhook saves the same, brought back on their next login.) Disable Waves is switched off by
+  // the HUD, which owns that toggle.
+  const grantPurchase = (sku, transactionId) => {
+    const notify = (text) => setNotice({ id: Date.now(), text });
+    const award = (change) => setProfile((current) => ({ ...current, ...change(current) }));
+    if (transactionId) award((current) => ({ transactions: [...current.transactions, transactionId].slice(-50) }));
+    const treadmill = PREMIUM_BOARDS.find((multiplier) => treadmillSku(multiplier) === sku);
+    const winsPack = winsPackAmount(sku);
+    if (sku === BUX_SKUS.TELEPORT_BACK) {
+      teleportBackRef.current();
+    } else if (sku === BUX_SKUS.BOOST_2X_WINS) {
+      award(() => ({ winsMultiplier: 2 }));
+      notify('2x Wins active! Every trophy now pays double.');
+    } else if (sku === BUX_SKUS.BOOST_2X_SPEED) {
+      bonusSpeedRef.current += Math.max(1, profileRef.current.speed);
+      notify('2x Speed! Your speed has been doubled.');
+    } else if (sku === BUX_SKUS.BIKE_ASTRALWING || sku === BUX_SKUS.BIKE_AETHERUNE) {
+      award((current) => ({ ownedBikes: [...new Set([...current.ownedBikes, sku])] }));
+      notify(`${sku === BUX_SKUS.BIKE_ASTRALWING ? 'Astralwing' : 'Aetherune'} Bike is yours!`);
+    } else if (treadmill) {
+      award((current) => ({ ownedTreadmills: [...new Set([...current.ownedTreadmills, treadmill])] }));
+      notify(`${treadmill}x Speed Treadmill unlocked! Ride onto it to train.`);
+    } else if (winsPack) {
+      award((current) => ({ wins: current.wins + winsPack }));
+      notify(`+${winsPack.toLocaleString()} Wins!`);
+    }
+  };
+  // Buys `sku` with Bux (Bloxity shows its own confirmation); resolves to the SDK's { success, error? }.
+  const buyWithBux = async (sku) => {
+    const result = await purchase(sku, { game: 'motorcycle-tsunami-escape' });
+    if (result.success) {
+      grantPurchase(sku, result.transactionId);
+      account.refreshBalance();
+    }
+    return result;
+  };
+
   const changeCustomSpeed = (value) => {
     setCustomSpeed(value);
     if (bikeRef.current) {
@@ -490,6 +704,7 @@ export default function App() {
   return (
     <main className="app-root">
       <canvas ref={canvasRef} className="game-canvas" aria-label="Motorcycle Tsunami Escape starting place" />
+      <div id="fps-counter" className="fps-counter" hidden />
       <StartingPlaceHUD
         bikes={BIKES}
         wins={profile.wins}
@@ -499,6 +714,9 @@ export default function App() {
         aetherunePurchaseOpen={aetherunePurchaseOpen}
         premiumBoardPurchase={premiumBoardPurchase}
         teleportBackOffer={teleportBackOffer}
+        account={account}
+        onPurchase={buyWithBux}
+        serverWavesDisabled={serverWavesDisabled}
         winsPurchaseOpen={winsPurchaseOpen}
         rewardBanner={rewardBanner}
         onClosePurchase={() => {

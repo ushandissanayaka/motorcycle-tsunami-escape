@@ -42,15 +42,16 @@ import PetsPopup from './PetsPopup.jsx';
 import InventoryPopup from './InventoryPopup.jsx';
 import DailyRewardsPopup from './DailyRewardsPopup.jsx';
 import WheelSpin from './WheelSpin.jsx';
+import { BUX_SKUS } from '../bloxity/skus.js';
 
 const SHOP_ITEMS = [
   { art: shopSona, box: [15, 78, 298, 361], name: 'Sona Bike', price: 59 },
   { art: shopFlash, box: [314, 78, 597, 361], name: 'Flash Bike', price: 85 },
   { art: shopDragon, box: [614, 78, 897, 361], name: 'Dragon Bike', price: 225 },
-  { art: shopAstralwing, box: [17, 377, 895, 669], name: 'Astralwing Bike (LIMITED!)', price: 999 },
-  { art: shopWins50, box: [15, 758, 298, 1040], name: '+50 Wins', price: 49 },
-  { art: shopWins500, box: [314, 758, 597, 1040], name: '+500 Wins', price: 299 },
-  { art: shopWins5000, box: [614, 758, 897, 1040], name: '+5,000 Wins', price: 599 },
+  { art: shopAstralwing, box: [17, 377, 895, 669], name: 'Astralwing Bike (LIMITED!)', price: 999, sku: BUX_SKUS.BIKE_ASTRALWING },
+  { art: shopWins50, box: [15, 758, 298, 1040], name: '+50 Wins', price: 49, sku: BUX_SKUS.WINS_50 },
+  { art: shopWins500, box: [314, 758, 597, 1040], name: '+500 Wins', price: 299, sku: BUX_SKUS.WINS_500 },
+  { art: shopWins5000, box: [614, 758, 897, 1040], name: '+5,000 Wins', price: 599, sku: BUX_SKUS.WINS_5000 },
 ];
 
 const TRAILS = [
@@ -92,7 +93,7 @@ export default function MenuPopups({
         <img className="popup-title" src={shopTitleMotorcycles} style={rect([299, 7, 615, 59], 3)} alt="Motorcycles" draggable={false} />
         <img className="popup-title" src={shopTitleWins} style={rect([386, 686, 525, 733], 3)} alt="Wins" draggable={false} />
         {SHOP_ITEMS.map((item) => (
-          <Card key={item.name} art={item.art} box={item.box} onClick={press(() => onBuy({ name: item.name, price: item.price, img: item.art }))} />
+          <Card key={item.name} art={item.art} box={item.box} onClick={press(() => onBuy({ name: item.name, price: item.price, img: item.art, sku: item.sku }))} />
         ))}
       </Popup>
     );

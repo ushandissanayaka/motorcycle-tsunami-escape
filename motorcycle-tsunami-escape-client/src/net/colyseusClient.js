@@ -22,12 +22,18 @@ function getServerUrl() {
   return url.toString().replace(/\/$/, '');
 }
 
+/** The game server's HTTP address (same host as its websocket), for its /api endpoints. */
+export function getServerHttpUrl() {
+  return getServerUrl().replace(/^ws/, 'http');
+}
+
+/** `username` is the Bloxity username when logged in (friends see them join); guests get a random one. */
 export async function joinStartingPlace({ username, onPlayers, onStatus }) {
   const client = new Client(getServerUrl());
   onStatus?.('connecting');
   const room = await client.joinOrCreate('starting_place', {
     username: username || `Rider-${Math.floor(1000 + Math.random() * 9000)}`,
-    isGuest: true,
+    isGuest: !username,
     equippedBike: 'bike_scooter',
     speed: 9,
   });
@@ -56,6 +62,7 @@ export async function joinStartingPlace({ username, onPlayers, onStatus }) {
 
   return {
     sessionId: room.sessionId,
+    roomId: room.roomId,
     sendMovement: ({ x, y, z, rotY, equippedBike }) => {
       try { room.send('move', { x, y, z, rotY, equippedBike }); } catch { /* reconnecting */ }
     },

@@ -259,7 +259,7 @@ export function createWorld2BikeDisplay() {
     { text: 'Astralwing Bike', y: 12.2, size: 1.05, width: 12.6, color: headline },
     { text: 'OP BIKE', y: 10.45, size: 1.28, width: 8.6, color: headline },
     { text: '2174 / 2500 Remaining!', y: 9.05, size: 0.72, width: 11.4, color: headline },
-    { text: '◉ 999', y: 7.85, size: 1.0, width: 4.8, color: '#52ff20' },
+    { text: '999', y: 7.85, size: 1.0, width: 4.8, color: ['#d2ecff', '#3c9dff'], bux: true },
   ];
   for (const line of signLines) {
     const sprite = signSprite(line.text, {
@@ -269,6 +269,7 @@ export function createWorld2BikeDisplay() {
       strokeEm: 0.22,
       width: line.width,
       height: line.size * 1.5,
+      bux: line.bux,
     });
     sprite.material.depthTest = false;
     sprite.renderOrder = 20;

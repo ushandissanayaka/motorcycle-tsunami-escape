@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { drawBuxCoin } from '../util/buxIcon.js';
 import { SIGN_FONT } from './Sign.js';
 
 /**
@@ -7,7 +8,7 @@ import { SIGN_FONT } from './Sign.js';
  * rarity / price label above it and a flat shadow (`shadow`) for the ground below.
  *
  * `def`: name, rarity, price, art (image url), size [w, h] and split [bodyLeft, bodyRight] in art pixels, and
- * optionally rarityColor or rarityFill [top, bottom], tag ("OP!"), coin (green coin instead of the trophy)
+ * optionally rarityColor or rarityFill [top, bottom], tag ("OP!"), coin (a price in Bux: the Bux coin instead of the trophy)
  * and glow (colour of a soft halo behind the wings).
  */
 
@@ -63,33 +64,6 @@ function drawTrophy(ctx, cx, cy, s) {
   ctx.fillRect(cx - s * 0.3, cy + s * 0.43, s * 0.6, s * 0.14);
 }
 
-/** Green hexagon coin, used for the Divine block's price. */
-function drawCoin(ctx, cx, cy, s) {
-  const hexagon = (radius) => {
-    ctx.beginPath();
-    for (let i = 0; i < 6; i += 1) {
-      const angle = Math.PI / 6 + (i * Math.PI) / 3;
-      ctx.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-    }
-    ctx.closePath();
-  };
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = s * 0.16;
-  ctx.strokeStyle = '#0c3a0c';
-  hexagon(s * 0.5);
-  ctx.stroke();
-  const gradient = ctx.createLinearGradient(0, cy - s * 0.5, 0, cy + s * 0.5);
-  gradient.addColorStop(0, '#b6ff4a');
-  gradient.addColorStop(1, '#2fd21a');
-  ctx.fillStyle = gradient;
-  hexagon(s * 0.5);
-  ctx.fill();
-  ctx.lineWidth = s * 0.12;
-  ctx.strokeStyle = '#1f8f12';
-  hexagon(s * 0.22);
-  ctx.stroke();
-}
-
 /** Name, rarity and price above a block (and the tag over the name, when there is one). */
 function labelSprite(def, width) {
   const { name, rarity, rarityColor, rarityFill, price, coin, tag } = def;
@@ -109,9 +83,9 @@ function labelSprite(def, width) {
     const priceWidth = ctx.measureText(price).width;
     const iconWidth = 78;
     const startX = 512 - (iconWidth + priceWidth) / 2;
-    if (coin) drawCoin(ctx, startX + iconWidth / 2 - 6, 412, 70);
+    if (coin) drawBuxCoin(ctx, startX + iconWidth / 2 - 6, 412, 36);
     else drawTrophy(ctx, startX + iconWidth / 2 - 6, 410, 74);
-    outlined(ctx, price, startX + iconWidth + priceWidth / 2, 412, 84, coin ? ['#d8ff5e', '#33d31a'] : '#ffe9a6', 16, undefined, coin ? '#0c3a0c' : INK);
+    outlined(ctx, price, startX + iconWidth + priceWidth / 2, 412, 84, coin ? ['#d2ecff', '#3c9dff'] : '#ffe9a6', 16, undefined, coin ? '#0a2240' : INK);
     texture.needsUpdate = true;
   };
   draw();

@@ -26,7 +26,8 @@ export function createChaseCamera(aspect) {
   // zoom / world-space yaw / pitch ease toward their targets. Camera yaw is independent of rider heading,
   // so turning the bike does not swing the camera around it; W / A / S / D steer relative to it (see
   // systems/movement.js). `steer` collects right-drag turning.
-  camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0, steer: 0 };
+  // `sensitivity` scales drag-to-rotate (the portal's camera_sensitivity setting).
+  camera.userData = { zoom: 1, zoomTarget: 1, yaw: 0, yawTarget: 0, pitch: 0, pitchTarget: 0, steer: 0, sensitivity: 1 };
   return camera;
 }
 
@@ -51,7 +52,7 @@ export function attachCameraControls(camera) {
     data.pitch = data.pitchTarget;
   };
   // Scrolling or dragging inside HUD panels must not move the world camera.
-  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel, .menu-popup');
+  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel, .menu-popup, .account-panel');
 
   const onWheel = (event) => {
     if (overPanel(event)) return;
@@ -91,7 +92,8 @@ export function attachCameraControls(camera) {
   const onPointerMove = (event) => {
     if (!drag || event.pointerId !== drag.id) return;
     // Dragging right turns the rider (and the view behind them) to the right.
-    dragBy(-(event.clientX - drag.x) * ORBIT_SPEED, (event.clientY - drag.y) * ORBIT_SPEED);
+    const speed = ORBIT_SPEED * data.sensitivity;
+    dragBy(-(event.clientX - drag.x) * speed, (event.clientY - drag.y) * speed);
     drag.x = event.clientX;
     drag.y = event.clientY;
   };

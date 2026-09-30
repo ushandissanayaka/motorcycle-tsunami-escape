@@ -120,8 +120,8 @@
 }
 .purchase-header { display: flex; align-items: center; height: 26px; gap: 17px; }
 .purchase-header h2 { flex: 1; margin: 0; font-size: 20px; line-height: 1; font-weight: 700; }
-.robux-balance { white-space: nowrap; color: #f3f3f5; font-size: 14px; }
-.robux-balance b, .purchase-item span b, .robux-offer b { font-size: 16px; }
+.bux-balance { display: flex; align-items: center; gap: 6px; white-space: nowrap; color: #f3f3f5; font-size: 14px; }
+.bux-balance .bux-icon, .purchase-item span .bux-icon { width: 17px; height: 17px; }
 .purchase-close { width: 27px; height: 27px; padding: 0; border: 0; background: none; color: #e7e7e9; font-size: 29px; line-height: 24px; cursor: pointer; }
 .purchase-item { display: flex; align-items: center; gap: 12px; height: 87px; }
 .purchase-item img { width: 68px; height: 68px; object-fit: contain; }
@@ -130,12 +130,17 @@
 .purchase-treadmill-icon { width: 68px; height: 68px; filter: drop-shadow(0 2px 3px #0008); }
 .purchase-item div { display: grid; gap: 5px; font-size: 14px; }
 .purchase-item span { display: flex; align-items: center; gap: 6px; color: #f2f2f4; }
-.robux-offer { display: flex; align-items: center; justify-content: space-between; height: 58px; box-sizing: border-box; padding: 0 18px;
-  border: 1.5px solid #eeeef0; border-radius: 11px; font-size: 16px; font-weight: 700; }
-.robux-offer del { margin-left: 8px; color: #aaaab1; }
-.purchase-buy { width: 100%; height: 40px; margin-top: 50px; border: 0; border-radius: 9px; background: #335fff; color: white; font-size: 14px; cursor: pointer; }
+.purchase-buy { width: 100%; height: 40px; margin-top: 22px; border: 0; border-radius: 9px; background: #335fff; color: white; font-size: 14px; cursor: pointer; }
 .purchase-buy:hover { background: #4770ff; }
-.purchase-terms { margin: 12px 0 0; color: #b8b8c0; text-align: center; font-size: 10px; }
+.purchase-buy:disabled { background: #2a3f8f; cursor: wait; }
+.purchase-terms { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 5px; margin: 12px 0 0; color: #b8b8c0; font-size: 11px; }
+.purchase-brand { display: inline-flex; align-items: center; gap: 4px; color: #fff; font-family: 'Montserrat', 'Segoe UI', Arial, sans-serif; font-weight: 800; }
+.purchase-brand img { width: 14px; height: 15px; }
+
+/* "ONLY (Bux) 75" under a HUD offer: the HUD's outlined lettering, with the Bux coin at the size of the digits. */
+.hud-price { position: absolute; display: flex; align-items: center; justify-content: center; gap: calc(6 * var(--u)); pointer-events: none;
+  font-size: calc(30 * var(--u)); --sw: 7; }
+.hud-price .bux-icon { width: 1em; height: 1em; }
 @media (max-width: 520px) {
   .purchase-dialog { padding: 15px; }
   .purchase-header h2 { font-size: 17px; }

@@ -5,6 +5,7 @@ import { createBike } from './Bike.js';
 import { createStoreBike } from './StoreBikes.js';
 import { createBlockyHuman } from './BlockyHuman.js';
 import { addWheelPivots, createWheelSpinner } from './wheelSpin.js';
+import { createNameTag } from './NameTag.js';
 
 // Rider and bike are drawn this much larger than the collision shape; gameplay sizes stay the same.
 const VISUAL_SCALE = 1.2;
@@ -162,6 +163,12 @@ export function createPlayer() {
     seatRider(rider, bike);
   };
   group.userData.setBikeColor = (color) => bike.userData.setColor?.(color);
+  // The player's name over the rider for a few seconds (shown when they log in).
+  const nameTag = createNameTag();
+  group.add(nameTag.sprite);
+  group.userData.showName = (name) => nameTag.show(name);
+  // Bloxity avatar proportions on the rider (see BlockyHuman's setProportions).
+  group.userData.setProportions = (proportions) => rider.userData.setProportions(proportions);
   // Leans bike and rider into a turn (roll about the wheels' contact line); the heading stays on the group.
   group.userData.setLean = (angle) => { visual.rotation.z = angle; };
   // Holds the visible bike a little below / above the physics position while it eases onto a ledge.

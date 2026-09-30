@@ -1,5 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import MenuPopups from './MenuPopups.jsx';
+import AccountPanel from './AccountPanel.jsx';
+import BuxIcon from './BuxIcon.jsx';
+import bloxityHead from '../assets/bloxity_head.svg';
+import { BUX_SKUS, treadmillSku } from '../bloxity/skus.js';
 import { levelTarget } from '../shared/constants.js';
 import './StartingPlaceHUD.css';
 
@@ -9,7 +13,6 @@ import rebirthArt from '../assets/hud/rebirth.png';
 import trailsArt from '../assets/hud/trails.png';
 import worldsArt from '../assets/hud/worlds.png';
 import winsArt from '../assets/hud/wins.png';
-import price75Art from '../assets/hud/price75.png';
 import dailyArt from '../assets/hud/daily.png';
 import wheelArt from '../assets/hud/wheel.png';
 import wavesArt from '../assets/hud/waves.png';
@@ -17,7 +20,6 @@ import customTitleArt from '../assets/hud/custom_title.png';
 import customBarArt from '../assets/hud/custom_bar.png';
 import maxArt from '../assets/hud/max.png';
 import speed2xArt from '../assets/hud/speed2x.png';
-import price3Art from '../assets/hud/price3.png';
 import petsArt from '../assets/hud/pets.png';
 import inventoryArt from '../assets/hud/inventory.png';
 import trollArt from '../assets/hud/troll.png';
@@ -49,7 +51,8 @@ const boxStyle = ([x0, y0, x1, y1]) => {
 const BOX = {
   shop: [18, 361, 162, 503], rebirth: [165, 361, 309, 503], trails: [18, 506, 162, 648],
   worlds: [165, 496, 328, 648], wins: [18, 651, 311, 749], price75: [82, 748, 248, 782],
-  daily: [1732, 4, 1832, 78], wheel: [1838, 4, 1916, 78], waves: [1425, 20, 1675, 275],
+  // Daily Rewards and Wheelspin sit just under the Bloxity account pill (AccountPanel), which takes the corner.
+  daily: [1732, 70, 1832, 144], wheel: [1838, 70, 1916, 144], waves: [1425, 20, 1675, 275],
   customTitle: [1662, 222, 1897, 264], customBar: [1636, 258, 1908, 340], max: [1768, 338, 1898, 372],
   speed2x: [1636, 378, 1906, 472], price3: [1698, 470, 1846, 504],
   pets: [1636, 500, 1767, 632], inventory: [1771, 500, 1902, 632], troll: [1771, 634, 1902, 766],
@@ -109,10 +112,20 @@ function StaticArt({ src, box }) {
   return <img className="hud-static" style={boxStyle(box)} src={src} alt="" draggable={false} />;
 }
 
+/** "ONLY (Bux) 75" under a HUD offer, in the HUD's outlined lettering. */
+function PriceTag({ box, amount }) {
+  return (
+    <div className="hud-price outlined" style={boxStyle(box)} aria-label={`Only ${amount} Bux`}>
+      ONLY <BuxIcon coin /> {amount}
+    </div>
+  );
+}
+
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
   speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, aetherunePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
   teleportBackOffer = false, winsPurchaseOpen = false, rewardBanner = null,
+  account, onPurchase, serverWavesDisabled = false,
 }) {
   const [menuPopup, setMenuPopup] = useState('daily'); // greet the player with Daily Rewards on load
   const [shopPurchase, setShopPurchase] = useState(null);
@@ -124,8 +137,14 @@ export default function StartingPlaceHUD({
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
   const [banner, setBanner] = useState(null);
+  const [buying, setBuying] = useState(false);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+
+  // Waves switched off by a Disable Waves bought earlier on this account (see App's server sync).
+  useEffect(() => {
+    if (serverWavesDisabled) setWavesDisabled(true);
+  }, [serverWavesDisabled]);
 
   // Big gold "You received N Wins!" across the top for a moment (its CSS animation fades it out).
   useEffect(() => {
@@ -170,7 +189,36 @@ export default function StartingPlaceHUD({
     setShowWavePurchase(true);
   });
 
-  const bigOffer = bikePurchaseOpen || aetherunePurchaseOpen || (shopPurchase?.price ?? 0) > 500;
+  const buxBalance = account?.balance ?? 0; // shown in the purchase dialog (0 while logged out)
+  // The Bux sku behind whichever offer is open (null: not for sale yet). The price shown is the offer's art;
+  // what is charged comes from the Bloxity catalog.
+  const purchaseSku = showTeleportPurchase ? BUX_SKUS.TELEPORT_BACK
+    : winsPurchaseOpen ? BUX_SKUS.BOOST_2X_WINS
+    : shopPurchase ? shopPurchase.sku ?? null
+    : aetherunePurchaseOpen ? BUX_SKUS.BIKE_AETHERUNE
+    : bikePurchaseOpen ? BUX_SKUS.BIKE_ASTRALWING
+    : premiumBoardPurchase ? treadmillSku(parseInt(premiumBoardPurchase, 10))
+    : showWavePurchase ? BUX_SKUS.DISABLE_WAVES
+    : null;
+  const buy = press(async () => {
+    if (!purchaseSku) {
+      showMessage('This item is not for sale yet.');
+      return;
+    }
+    if (buying) return;
+    setBuying(true);
+    const result = await onPurchase(purchaseSku);
+    setBuying(false);
+    if (result.success) {
+      if (purchaseSku === BUX_SKUS.DISABLE_WAVES) {
+        setWavesDisabled(true);
+        onWavesChange?.(true);
+      }
+      closePurchase();
+    } else if (result.error) {
+      showMessage(`Purchase not completed: ${result.error}`);
+    }
+  });
   const currentLevelTarget = levelTarget(level);
   const barFill = speed === 0 ? 0 : (levelProgress / currentLevelTarget) * 100;
 
@@ -192,6 +240,8 @@ export default function StartingPlaceHUD({
 
   return (
     <div className="starting-hud">
+      <AccountPanel account={account} onMessage={showMessage} />
+
       {/* Top-left: trophy with the live wins count */}
       <button className="hud-btn art-btn wins-btn" style={boxStyle(BOX.trophy)} aria-label={`Wins: ${wins}`} onClick={soon(`You have ${wins.toLocaleString()} ${wins === 1 ? 'win' : 'wins'}.`)}>
         <img className="wins-trophy" src={trophyArt} alt="" draggable={false} />
@@ -203,8 +253,8 @@ export default function StartingPlaceHUD({
       <Art src={rebirthArt} box={BOX.rebirth} label="Rebirth" onClick={toggleMenu('rebirth')} />
       <Art src={trailsArt} box={BOX.trails} label="Trails" onClick={toggleMenu('trails')} />
       <Art src={worldsArt} box={BOX.worlds} label="Worlds" onClick={toggleMenu('worlds')} />
-      <Art src={winsArt} box={BOX.wins} label="2x Wins" onClick={soon('Win boosts are coming in a later update.')} />
-      <StaticArt src={price75Art} box={BOX.price75} />
+      <Art src={winsArt} box={BOX.wins} label="2x Wins" onClick={press(() => setShopPurchase({ name: '2x Wins', price: 75, icon: '🏆', sku: BUX_SKUS.BOOST_2X_WINS }))} />
+      <PriceTag box={BOX.price75} amount={75} />
 
       <MenuPopups
         popup={menuPopup} level={level} onClose={() => setMenuPopup(null)} onBuy={setShopPurchase} onMessage={showMessage}
@@ -219,7 +269,7 @@ export default function StartingPlaceHUD({
 
       {/* Offered while a wave's wreckage settles and for a while after the respawn */}
       {teleportBackOffer && (
-        <button className="hud-btn teleport-back-btn" aria-label="Teleport Back for 9 Robux" onClick={press(() => setShowTeleportPurchase(true))}>
+        <button className="hud-btn teleport-back-btn" aria-label="Teleport Back for 9 Bux" onClick={press(() => setShowTeleportPurchase(true))}>
           <img src={teleportBackArt} alt="" draggable={false} />
         </button>
       )}
@@ -231,13 +281,14 @@ export default function StartingPlaceHUD({
           </svg>
           <section className="purchase-dialog" role="dialog" aria-modal="true" aria-labelledby="wave-purchase-title">
             <header className="purchase-header">
-              <h2 id="wave-purchase-title">Buy Robux and item</h2>
-              <span className="robux-balance" aria-label="0 Robux"><b>⬡</b> 0</span>
+              <h2 id="wave-purchase-title">Buy item</h2>
+              <span className="bux-balance" aria-label={`Your balance: ${buxBalance} Bux`}><BuxIcon /> {buxBalance.toLocaleString()}</span>
               <button className="purchase-close" aria-label="Close" onClick={closePurchase}>×</button>
             </header>
             <div className="purchase-item">
               {showTeleportPurchase ? <TeleportIcon />
                 : winsPurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏆</span>
+                : shopPurchase?.icon ? <span className="purchase-bike-icon" aria-hidden="true">{shopPurchase.icon}</span>
                 : shopPurchase ? <img src={shopPurchase.img} alt="" />
                 : aetherunePurchaseOpen ? <img src={aetheruneBikeArt} alt="" />
                 : bikePurchaseOpen ? <span className="purchase-bike-icon" aria-hidden="true">🏍️</span>
@@ -248,11 +299,14 @@ export default function StartingPlaceHUD({
                     <path d="M27 21h10v6H27z" fill={premiumBoardPurchase === '25x' ? '#bf62ff' : premiumBoardPurchase === '3x' ? '#ffc21a' : '#438dff'} />
                   </svg>
                 ) : <img src={wavesArt} alt="" />}
-              <div><strong>{showTeleportPurchase ? 'Teleport Back' : winsPurchaseOpen ? '2x Wins' : shopPurchase ? shopPurchase.name : aetherunePurchaseOpen ? 'Aetherune Bike' : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><b>⬡</b> {showTeleportPurchase ? '9' : winsPurchaseOpen ? '75' : shopPurchase ? shopPurchase.price : aetherunePurchaseOpen ? '699' : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
+              <div><strong>{showTeleportPurchase ? 'Teleport Back' : winsPurchaseOpen ? '2x Wins' : shopPurchase ? shopPurchase.name : aetherunePurchaseOpen ? 'Aetherune Bike' : bikePurchaseOpen ? 'Astralwing Bike (LIMITED!)' : premiumBoardPurchase ? `x${premiumBoardPurchase.replace('x', '')} Speed Treadmill` : 'Disable Waves'}</strong><span><BuxIcon /> {showTeleportPurchase ? '9' : winsPurchaseOpen ? '75' : shopPurchase ? shopPurchase.price : aetherunePurchaseOpen ? '699' : bikePurchaseOpen ? '999' : premiumBoardPurchase === '3x' ? '29' : premiumBoardPurchase === '9x' ? '85' : premiumBoardPurchase === '25x' ? '225' : premiumBoardPurchase === '100x' ? '449' : '19'}</span></div>
             </div>
-            <div className="robux-offer"><span><b>⬡</b> {bigOffer ? '1,000' : '500'} <del><b>⬡</b> {bigOffer ? '800' : '400'}</del></span><strong>{bigOffer ? '$9.99' : '$4.99'}</strong></div>
-            <button className="purchase-buy" onClick={() => showMessage('Purchases are not available yet.')}>Buy</button>
-            <p className="purchase-terms">Your payment method will be charged. Roblox <u>Terms of Use</u> apply.</p>
+            <button className="purchase-buy" onClick={buy} disabled={buying}>{buying ? 'Buying...' : 'Buy'}</button>
+            <p className="purchase-terms">
+              Paid with Bux from your
+              <span className="purchase-brand"><img src={bloxityHead} alt="" />Bloxity</span>
+              account.
+            </p>
           </section>
         </div>
       )}
@@ -271,8 +325,8 @@ export default function StartingPlaceHUD({
       </div>
       <StaticArt src={maxArt} box={BOX.max} />
 
-      <Art src={speed2xArt} box={BOX.speed2x} label="2x Speed" onClick={soon('2x Speed is a premium boost - coming soon.')} />
-      <StaticArt src={price3Art} box={BOX.price3} />
+      <Art src={speed2xArt} box={BOX.speed2x} label="2x Speed" onClick={press(() => setShopPurchase({ name: '2x Speed', price: 3, icon: '⚡', sku: BUX_SKUS.BOOST_2X_SPEED }))} />
+      <PriceTag box={BOX.price3} amount={3} />
       <Art src={petsArt} box={BOX.pets} label="Pets" onClick={toggleMenu('pets')} />
       <Art src={inventoryArt} box={BOX.inventory} label="Inventory" onClick={toggleMenu('inventory')} />
       <Art src={trollArt} box={BOX.troll} label="Troll" onClick={soon('Troll tools are coming soon.')} />

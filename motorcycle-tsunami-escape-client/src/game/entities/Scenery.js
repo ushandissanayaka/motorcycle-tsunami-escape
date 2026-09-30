@@ -1,35 +1,11 @@
 import * as THREE from 'three';
 import { createStoreBike } from './StoreBikes.js';
+import { drawBuxCoin } from '../util/buxIcon.js';
 
 /** Decorative set pieces around the starting place. */
 
-/** Small hexagonal gem icon (like the in-game currency icon), centred at (cx, cy). */
-function drawHexGem(ctx, cx, cy, size, fill, edge) {
-  ctx.save();
-  ctx.beginPath();
-  for (let i = 0; i < 6; i += 1) {
-    const a = (Math.PI / 3) * i - Math.PI / 2;
-    const px = cx + Math.cos(a) * (size / 2);
-    const py = cy + Math.sin(a) * (size / 2);
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-  }
-  ctx.closePath();
-  ctx.fillStyle = fill;
-  ctx.strokeStyle = edge;
-  ctx.lineWidth = 4;
-  ctx.fill();
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(cx, cy - size / 2 + 4);
-  ctx.lineTo(cx, cy + size / 2 - 4);
-  ctx.stroke();
-  ctx.restore();
-}
-
 /**
- * Stacked lines of big outlined text. A line with `icon` (e.g. a price) draws a small hex gem
+ * Stacked lines of big outlined text. A line with `icon` (a price in Bux) draws the Bux coin
  * immediately before the text instead of centering the text alone.
  */
 function textSprite(lines, width, height, scaleX, scaleY) {
@@ -59,7 +35,7 @@ function textSprite(lines, width, height, scaleX, scaleY) {
       const iconSize = icon.size ?? 34;
       const gap = 10;
       const startX = width / 2 - (iconSize + gap + textWidth) / 2;
-      drawHexGem(ctx, startX + iconSize / 2, y, iconSize, icon.color ?? '#5be23a', icon.edge ?? '#1f7a12');
+      drawBuxCoin(ctx, startX + iconSize / 2, y, iconSize / 2);
       ctx.textAlign = 'left';
       ctx.strokeText(text, startX + iconSize + gap, y, width - 20);
       setFill(fill, y, font);
@@ -252,7 +228,7 @@ export function createBikeDisplay({ bikeId, name, price }) {
     [
       { text: 'LIMITED!', y: 36, font: '900 52px "Arial Black", Arial, sans-serif', fill: ['#ffe32a', '#ff7418'] },
       { text: name, y: 96, font: '800 46px Arial, sans-serif', fill: ['#c8f8ff', '#36caff'] },
-      { text: price, y: 152, font: '800 40px Arial, sans-serif', fill: '#8dff5a', icon: {} },
+      { text: price, y: 152, font: '800 40px Arial, sans-serif', fill: ['#d2ecff', '#3c9dff'], stroke: '#0a2240', icon: {} },
     ],
     512, 190, 5.6, 2.08
   );

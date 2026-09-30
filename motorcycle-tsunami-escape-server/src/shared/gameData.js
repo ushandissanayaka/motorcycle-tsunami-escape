@@ -51,6 +51,7 @@ export const BIKES = [
 
 // Bux skus — prices are set in the Bloxity dev-portal IAP catalog, NOT here.
 // This list is just which skus your client is allowed to request.
+// The client's src/bloxity/skus.js mirrors this list; every sku must also exist in the dev-portal catalog.
 export const BUX_SKUS = {
   DISABLE_WAVES: 'disable_waves',
   BOOST_2X_SPEED: 'boost_2x_speed',
@@ -58,6 +59,14 @@ export const BUX_SKUS = {
   VIP_PASS: 'vip_pass',
   BIKE_ASTRALWING: 'bike_astralwing',
   BIKE_AETHERUNE: 'bike_aetherune',
+  TELEPORT_BACK: 'teleport_back',
+  TREADMILL_3X: 'treadmill_3x',
+  TREADMILL_9X: 'treadmill_9x',
+  TREADMILL_25X: 'treadmill_25x',
+  TREADMILL_100X: 'treadmill_100x',
+  WINS_50: 'wins_50',
+  WINS_500: 'wins_500',
+  WINS_5000: 'wins_5000',
 };
 
 // Soft-currency (the ◉ icon) prices — these ARE yours to define since it's

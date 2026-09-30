@@ -10,6 +10,8 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .app-root { position: relative; width: 100vw; height: 100vh; background: #9bdcff; }
 .game-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+.fps-counter { position: absolute; z-index: 9; bottom: 8px; left: 8px; padding: 2px 8px; border-radius: 6px; background: rgb(0 0 0 / 55%); color: #b8ffb0; font: 600 12px/1.4 ui-monospace, Consolas, monospace; pointer-events: none; }
+.fps-counter[hidden] { display: none; }
 .hud-overlay { position: absolute; inset: 0; pointer-events: none; }
 .hud-overlay button { pointer-events: auto; }
 

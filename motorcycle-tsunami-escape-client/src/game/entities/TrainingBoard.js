@@ -293,7 +293,7 @@ const solid = (color, roughness = 0.5) =>
   new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.1, emissive: color, emissiveIntensity: 0.22 });
 
 /**
- * Treadmill-style training board (Roblox "speed pad"): lattice frame with side rails, striped deck, a monitor
+ * Treadmill-style training board (a "speed pad"): lattice frame with side rails, striped deck, a monitor
  * on a stand at the +X end, a floating "Nx Speed" banner (unless `banner` is false), and an animated aura (glow, speed streaks, swirling
  * wind ribbons, lightning and twinkling stars). `length` x `width` is the deck footprint and `height` scales
  * everything vertical. Position is the deck centre; the board is not rotated.

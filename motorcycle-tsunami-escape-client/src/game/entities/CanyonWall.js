@@ -4,7 +4,7 @@ import { MAP_LAYOUT } from '../../shared/constants.js';
 import { makeStudTexture, mulberry32 } from '../util/textures.js';
 
 // Salmon studded rock under bright studded grass caps that overhang the rock
-// and drip down in jagged clumps (Roblox terrain look).
+// and drip down in jagged clumps (a blocky terrain look).
 const ROCK = { base: '#dc7c6e', light: '#f5a294', dark: '#b45a52' };
 const GRASS = { base: '#6ccb4b', light: '#93e46f', dark: '#3f9c32' };
 const ROCK_TINTS = [0xffffff, 0xf6dcd4, 0xffe6de, 0xeecbc3, 0xfff0ea];

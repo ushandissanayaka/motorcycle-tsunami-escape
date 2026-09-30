@@ -10,6 +10,13 @@ const GRAVITY = 16; // units/sec^2
 // trench wall and catching its lip reads as a quick hop, not a teleport. Collision is unaffected.
 const POP_MIN = 0.03; // smaller changes are ordinary slopes, followed exactly
 const POP_RECOVER = 16;
+// On a ramp a fast rider climbs more than POP_MIN in one sub-step, and each sub-step used to become a small
+// ledge "pop" whose size varied with the frame length: the bike bobbed up and down along every ramp instead
+// of gliding up it. So the surface's own slope just behind the rider (sampled SLOPE_SAMPLE back along the
+// way it drove) says how much rise is ramp, followed exactly; only the rest is a ledge. A ledge crossed
+// right at the sample point counts as at most MAX_SLOPE.
+const SLOPE_SAMPLE = 0.05;
+const MAX_SLOPE = 0.8;
 
 // Camera-relative controls. W / A / S / D point forward / left / back / right as seen from the camera
 // (combinations give the diagonals). A quick tap only turns: A / D by TAP_TURN, and W / S by up to
@@ -181,10 +188,15 @@ function moveWithCollision(target, dx, dz, collision) {
 }
 
 /** One slice of vertical motion: stand on / step up to the surface below, drive off an edge into a fall, or fly and land. */
-function stepVertical(target, dt, collision) {
+function stepVertical(target, dt, collision, dirX = 0, dirZ = 0, driven = 0) {
   const data = target.userData;
   const { x, z } = target.position;
   const support = collision ? collision.supportAt(x, z, target.position.y) : 0;
+  let popMin = POP_MIN;
+  if (collision && driven > 0) {
+    const behind = collision.supportAt(x - dirX * SLOPE_SAMPLE, z - dirZ * SLOPE_SAMPLE, target.position.y);
+    popMin += Math.min(Math.abs(support - behind) / SLOPE_SAMPLE, MAX_SLOPE) * driven;
+  }
 
   if (data.grounded) {
     if (target.position.y > support + STEP_HEIGHT) {
@@ -193,7 +205,7 @@ function stepVertical(target, dt, collision) {
       data.jumpVelocity = 0;
     } else {
       const snap = support - target.position.y;
-      if (Math.abs(snap) > POP_MIN) data.popOffset = (data.popOffset ?? 0) - snap;
+      if (Math.abs(snap) > popMin) data.popOffset = (data.popOffset ?? 0) - snap;
       target.position.y = support;
       return;
     }
@@ -201,7 +213,7 @@ function stepVertical(target, dt, collision) {
 
   // A ledge that is within a step is climbed even in mid-air.
   const climb = support - target.position.y;
-  if (climb > POP_MIN) data.popOffset = (data.popOffset ?? 0) - climb;
+  if (climb > popMin) data.popOffset = (data.popOffset ?? 0) - climb;
   target.position.y = Math.max(target.position.y, support);
   target.position.y += data.jumpVelocity * dt;
   data.jumpVelocity -= GRAVITY * dt;
@@ -252,8 +264,14 @@ export function updateMovement(target, keys, deltaSeconds, collision = null, cam
   const stepX = forward.x * Math.sign(drive) * distance / steps;
   const stepZ = forward.z * Math.sign(drive) * distance / steps;
   for (let i = 0; i < steps; i += 1) {
+    const fromX = target.position.x;
+    const fromZ = target.position.z;
     if (drive !== 0) moveWithCollision(target, stepX, stepZ, collision);
-    stepVertical(target, deltaSeconds / steps, collision);
+    const movedX = target.position.x - fromX;
+    const movedZ = target.position.z - fromZ;
+    const driven = Math.hypot(movedX, movedZ);
+    if (driven > 1e-6) stepVertical(target, deltaSeconds / steps, collision, movedX / driven, movedZ / driven, driven);
+    else stepVertical(target, deltaSeconds / steps, collision);
   }
 
   // The visible bike eases after any ledge the physics just stepped it onto (see POP_RECOVER).

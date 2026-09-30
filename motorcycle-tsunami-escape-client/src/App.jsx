@@ -21,6 +21,10 @@ import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
 const SAVE_KEY = 'mte-starting-place';
 const SESSION_PROGRESS_KEY = 'mte-session-progress';
+// Other riders ease toward their latest reported position (sent every ~100 ms) at this rate per second, and
+// jump straight there when it is further off than REMOTE_SNAP_DISTANCE (a respawn or teleport).
+const REMOTE_FOLLOW_RATE = 12;
+const REMOTE_SNAP_DISTANCE = 20;
 const freshProfile = { wins: 0, finishes: 0, selectedBike: 'bike_scooter', speed: 0, level: 1, levelProgress: 0 };
 const effectiveBikeSpeed = (baseSpeed, speed, level) =>
   baseSpeed + Math.min(30, Math.sqrt(Math.max(0, speed)) * 0.25) + Math.min(100, Math.max(0, level - 1)) * 0.3;
@@ -175,8 +179,14 @@ export default function App() {
             }
             rider.userData.setBikeModel?.(remote.equippedBike);
             rider.userData.setBikeColor?.(rideColor(bike));
-            rider.position.set(remote.x, remote.y, remote.z);
-            rider.rotation.y = remote.rotY;
+            // Positions arrive only every ~100 ms; animate eases each rider toward its latest one (see
+            // REMOTE_FOLLOW_RATE) instead of jumping there, which made other players' bikes stutter.
+            const netTarget = rider.userData.netTarget;
+            if (!netTarget || Math.hypot(remote.x - netTarget.x, remote.z - netTarget.z) > REMOTE_SNAP_DISTANCE) {
+              rider.position.set(remote.x, remote.y, remote.z);
+              rider.rotation.y = remote.rotY;
+            }
+            rider.userData.netTarget = { x: remote.x, y: remote.y, z: remote.z, rotY: remote.rotY };
           }
           for (const [sessionId, rider] of remoteRiders) {
             if (!present.has(sessionId)) {
@@ -286,6 +296,18 @@ export default function App() {
         world.speedPopups.spawn(world.player.position, speedPopupAccum, nowSeconds, world.player.rotation.y);
         speedPopupAccum = 0;
         lastSpeedPopupTime = nowSeconds;
+      }
+      const remoteFollow = 1 - Math.exp(-REMOTE_FOLLOW_RATE * delta);
+      for (const rider of remoteRiders.values()) {
+        const netTarget = rider.userData.netTarget;
+        if (!netTarget) continue;
+        rider.position.x += (netTarget.x - rider.position.x) * remoteFollow;
+        rider.position.y += (netTarget.y - rider.position.y) * remoteFollow;
+        rider.position.z += (netTarget.z - rider.position.z) * remoteFollow;
+        let turn = (netTarget.rotY - rider.rotation.y) % (Math.PI * 2);
+        if (turn > Math.PI) turn -= Math.PI * 2;
+        else if (turn < -Math.PI) turn += Math.PI * 2;
+        rider.rotation.y += turn * remoteFollow;
       }
       updateChaseCamera(camera, world.player, delta);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera, () => {

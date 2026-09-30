@@ -171,6 +171,39 @@ function steer(target, keys, deltaSeconds, cameraYaw) {
   return driving;
 }
 
+// The bike tips to the slope it rides on (nose up climbing a ramp, down going down one): the ground is sampled
+// PITCH_REACH ahead of and behind the bike's middle along its heading, about where its wheels touch. It is
+// only a slope if the ground under the middle lies between them (PITCH_SMOOTHNESS); a ledge or a pit's edge
+// isn't one, and the bike stays level there. The tip eases in at PITCH_RATE per second, up to MAX_PITCH.
+const PITCH_REACH = 1.0; // world units
+const PITCH_SMOOTHNESS = 0.08; // world units
+const MAX_PITCH = 35 * DEG;
+const PITCH_RATE = 12;
+
+/** The pitch (radians, nose up positive) of the slope under a bike at `position` heading `heading`, or 0 off a slope. */
+function slopePitch(collision, position, heading) {
+  if (!collision) return 0;
+  const { x, y, z } = position;
+  const dx = -Math.sin(heading) * PITCH_REACH;
+  const dz = -Math.cos(heading) * PITCH_REACH;
+  const front = collision.supportAt(x + dx, z + dz, y);
+  const back = collision.supportAt(x - dx, z - dz, y);
+  const middle = collision.supportAt(x, z, y);
+  if (Math.abs(middle - (front + back) / 2) > PITCH_SMOOTHNESS) return 0;
+  return THREE.MathUtils.clamp(Math.atan2(front - back, PITCH_REACH * 2), -MAX_PITCH, MAX_PITCH);
+}
+
+/**
+ * Tips `target`'s bike to the slope it is on (level in the air), easing toward it; `grounded` defaults to the
+ * rider's own state (other players' riders pass whether they are on the ground).
+ */
+export function updateRidePitch(target, collision, deltaSeconds, grounded = target.userData.grounded) {
+  const data = target.userData;
+  const goal = grounded ? slopePitch(collision, target.position, target.rotation.y) : 0;
+  data.pitch = (data.pitch ?? 0) + (goal - (data.pitch ?? 0)) * (1 - Math.exp(-PITCH_RATE * deltaSeconds));
+  data.setPitch?.(data.pitch);
+}
+
 const MAX_SUBSTEP = 0.4; // world units; keeps fast riders from tunnelling through walls
 const UP = new THREE.Vector3(0, 1, 0);
 const forward = new THREE.Vector3(); // reused every frame rather than making new vectors to throw away
@@ -282,6 +315,7 @@ export function updateMovement(target, keys, deltaSeconds, collision = null, cam
     if (Math.abs(target.userData.popOffset) < 1e-3) target.userData.popOffset = 0;
   }
   target.userData.setVisualOffset?.(target.userData.popOffset ?? 0);
+  updateRidePitch(target, collision, deltaSeconds);
 
   // Keep the rider inside the canyon wall.
   const inside = clampToMap(target.position.x, target.position.z);

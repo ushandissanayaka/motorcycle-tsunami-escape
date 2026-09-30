@@ -7,7 +7,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import {
-  applyAllSettings, authenticateWithServer, getProportions, getUser, isEmbedded, listenSetting, onPlayerEvent,
+  applyAllSettings, authenticateWithServer, getAvatarSpec, getUser, isEmbedded, listenSetting, onAvatarChanged, onPlayerEvent,
   onProportionsChanged, onUserChanged, playerInRoom, playerJoined, purchase, setFullscreen, showPortalMenu,
   startBloxity, updateRoom,
 } from './bloxity/bloxity.js';
@@ -17,7 +17,7 @@ import { gameplayEnd, gameplayStart, loadingEnd, loadingStep } from './bloxity/l
 import { hideLoadingScreen } from './ui/loadingScreen.js';
 import { buildStartingPlace } from './game/scenes/StartingPlace.js';
 import { attachCameraControls, createChaseCamera, updateChaseCamera } from './game/systems/camera.js';
-import { createInputState, updateMovement } from './game/systems/movement.js';
+import { createInputState, updateMovement, updateRidePitch } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
 import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
@@ -216,6 +216,7 @@ export default function App() {
         connectToRoom();
       }, 2500);
     };
+    let avatarJson = null; // the player's Bloxity avatar as last shown and sent to the room
     let joinedAs = null; // the Bloxity username the room was joined with (null: as a guest)
     let announced = null; // session ids of the other riders Bloxity has been told about, this connection
     const connectToRoom = () => {
@@ -224,6 +225,8 @@ export default function App() {
       loadingStep('Joining server');
       joinStartingPlace({
         username: joinedAs,
+        displayName: getUser()?.displayName,
+        avatar: avatarJson,
         onStatus: (status) => {
           if (cancelled) return;
           setPresence((current) => ({ ...current, status }));
@@ -239,14 +242,19 @@ export default function App() {
         onPlayers: (players, localSessionId) => {
           if (cancelled) return;
           // Tell Bloxity who is here (it toasts the player's friends): the riders already in the room when
-          // joining, then each one who joins after.
+          // joining, then each one who joins after. A logged-in player joining (as they do on logging in) has
+          // their name shown over their rider for a few seconds.
           const firstList = announced === null;
           announced ??= new Set();
+          const greet = new Set();
           for (const remote of players) {
             if (remote.sessionId === localSessionId || announced.has(remote.sessionId)) continue;
             announced.add(remote.sessionId);
             if (firstList) playerInRoom(remote.username);
-            else playerJoined(remote.username);
+            else {
+              playerJoined(remote.username);
+              if (!remote.isGuest) greet.add(remote.sessionId);
+            }
           }
           const present = new Set();
           for (const remote of players) {
@@ -259,6 +267,18 @@ export default function App() {
               scene.add(rider);
               remoteRiders.set(remote.sessionId, rider);
             }
+            // Dress them as their Bloxity avatar (built in spare time; the default one if they sent none).
+            if (remote.avatar !== rider.userData.avatarJson) {
+              rider.userData.avatarJson = remote.avatar;
+              let spec = { equipped: {} };
+              try {
+                if (remote.avatar) spec = JSON.parse(remote.avatar);
+              } catch {
+                // Not an avatar: the default one.
+              }
+              rider.userData.setAvatar(spec);
+            }
+            if (greet.has(remote.sessionId)) rider.userData.showName(remote.displayName || remote.username);
             rider.userData.setBikeModel?.(remote.equippedBike);
             rider.userData.setBikeColor?.(rideColor(bike));
             // Positions arrive only every ~100 ms; animate eases each rider toward its latest one (see
@@ -273,6 +293,7 @@ export default function App() {
           for (const [sessionId, rider] of remoteRiders) {
             if (!present.has(sessionId)) {
               scene.remove(rider);
+              rider.userData.dispose();
               remoteRiders.delete(sessionId);
             }
           }
@@ -283,6 +304,7 @@ export default function App() {
         else {
           room = connection;
           updateRoom(connection.roomId); // friends invited now join this room
+          if (avatarJson) connection.sendAvatar(avatarJson); // in case the avatar changed while joining
         }
       }).catch((error) => {
         console.info('Starting Place server is not available:', error.message);
@@ -294,6 +316,20 @@ export default function App() {
     };
     connectToRoom();
 
+    // The player's Bloxity avatar rides their bike, and goes to the room so other players see it too. Logging in,
+    // changing the avatar or its proportions in the portal all redress the rider.
+    const applyAvatar = () => {
+      const spec = getAvatarSpec();
+      const json = JSON.stringify(spec);
+      if (json === avatarJson) return;
+      avatarJson = json;
+      world.player.userData.setAvatar(spec, { now: true }).then(() => world.shatter.prepare(world.player));
+      room?.sendAvatar(json);
+    };
+    applyAvatar();
+    const stopWatchingAvatar = onAvatarChanged(applyAvatar);
+    const stopWatchingProportions = onProportionsChanged(applyAvatar);
+
     // Bloxity: logging in or out rejoins the room under the new name (so friends see who joined), and a
     // logged-in player's purchases saved on this game's server are brought into this session.
     let greetedUserId = null; // the user whose name was last shown over the rider
@@ -302,6 +338,7 @@ export default function App() {
       // Logging in shows the player's name over their rider for a few seconds.
       if (user && user._id !== greetedUserId) world.player.userData.showName(user.displayName || user.username);
       greetedUserId = user?._id ?? null;
+      applyAvatar();
       if (room && username !== joinedAs) {
         room.leave(); // its onLeave reports 'offline', which reconnects with the new name
         room = null;
@@ -322,11 +359,6 @@ export default function App() {
         }
       });
     });
-
-    // Bloxity avatar proportions shape the local rider.
-    const applyProportions = (proportions) => { if (proportions) world.player.userData.setProportions(proportions); };
-    applyProportions(getProportions());
-    const stopWatchingProportions = onProportionsChanged(applyProportions);
 
     // Portal settings the game supports (registering one is what shows its control in the portal menu).
     const fpsCounter = document.getElementById('fps-counter');
@@ -502,6 +534,9 @@ export default function App() {
         if (turn > Math.PI) turn -= Math.PI * 2;
         else if (turn < -Math.PI) turn += Math.PI * 2;
         rider.rotation.y += turn * remoteFollow;
+        // Other riders' bikes tip to the slopes they ride on too (level while in the air).
+        const ground = world.collision.supportAt(rider.position.x, rider.position.z, rider.position.y);
+        updateRidePitch(rider, world.collision, delta, Math.abs(rider.position.y - ground) < 0.15);
       }
       updateChaseCamera(camera, world.player, delta);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera, () => {
@@ -576,6 +611,7 @@ export default function App() {
       updateRoom('');
       gameplayEnd();
       stopWatchingUser();
+      stopWatchingAvatar();
       stopWatchingProportions();
       stopSettings.forEach((stop) => stop());
       stopPlayerEvents();

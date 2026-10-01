@@ -20,11 +20,12 @@ import { attachCameraControls, createChaseCamera, updateChaseCamera } from './ga
 import { createInputState, updateMovement, updateRidePitch } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
-import { BIKES, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
+import { BIKES, MAP_LAYOUT, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
 import { HIDDEN_COUNT_OVER } from './game/entities/WaveTrack.js';
 import { SPEED_POPUP_VALUE } from './game/entities/SpeedPopup.js';
 import { getServerHttpUrl, joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
+import { createGameAudio } from './game/audio/GameAudio.js';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
 const SAVE_KEY = 'mte-starting-place';
@@ -33,6 +34,7 @@ const SESSION_PROGRESS_KEY = 'mte-session-progress';
 // jump straight there when it is further off than REMOTE_SNAP_DISTANCE (a respawn or teleport).
 const REMOTE_FOLLOW_RATE = 12;
 const REMOTE_SNAP_DISTANCE = 20;
+const WAVE_HEAR_RANGE = 140; // world units: how far off an approaching wave starts to be heard
 // ownedBikes / ownedTreadmills / winsMultiplier: what Bux bought (see grantPurchase); transactions: their ids.
 const freshProfile = {
   wins: 0, finishes: 0, selectedBike: 'bike_scooter', speed: 0, level: 1, levelProgress: 0,
@@ -107,10 +109,22 @@ export default function App() {
   const padHandlerRef = useRef(() => {});
   const teleportBackRef = useRef(() => {}); // puts the rider back where the last wave caught them (set in the game loop's effect)
   const account = useBloxityAccount();
+  const audioRef = useRef(null);
+  const [muted, setMuted] = useState(false);
 
   useEffect(() => {
     startBloxity();
     loadingStep('Building the world');
+    // Music, jingles and the engine (silent until the player's first key press or click; see GameAudio).
+    const audio = createGameAudio();
+    audioRef.current = audio;
+    setMuted(audio.isMuted());
+    const stopWatchingMute = audio.onMutedChange(setMuted);
+    // Every button in the HUD and its popups answers a press with a water-drop "bloop".
+    const onButtonPress = (event) => {
+      if (event.target instanceof Element && event.target.closest('button, [role="button"]')) audio.playClick();
+    };
+    window.addEventListener('pointerdown', onButtonPress, true);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x9bdcff);
@@ -192,6 +206,7 @@ export default function App() {
       world.shatter.clear();
       world.player.visible = true;
       setTeleportBackOffer(false);
+      audio.playRespawn();
     };
     const sendHome = () => {
       world.player.position.set(0, 0, 0);
@@ -374,6 +389,14 @@ export default function App() {
         const sensitivity = parseFloat(value);
         camera.userData.sensitivity = Number.isFinite(sensitivity) ? THREE.MathUtils.clamp(sensitivity, 0.1, 5) : 1;
       }),
+      listenSetting('master_volume', (value) => {
+        const volume = parseInt(value, 10);
+        audio.setMasterVolume(Number.isFinite(volume) ? volume / 100 : 1);
+      }),
+      listenSetting('music_volume', (value) => {
+        const volume = parseInt(value, 10);
+        audio.setMusicVolume(Number.isFinite(volume) ? volume / 100 : 0.8);
+      }),
       listenSetting('fullscreen', (value) => {
         if (fullscreenReady) setFullscreen(value === 'true');
         fullscreenReady = true;
@@ -389,6 +412,8 @@ export default function App() {
     // Esc opens the portal's pause menu when the game runs inside Bloxity.
     const onEscape = (event) => {
       if (event.key === 'Escape' && isEmbedded()) showPortalMenu();
+      // M mutes and unmutes all game audio (not while typing, e.g. in the custom speed box).
+      if (event.code === 'KeyM' && !event.repeat && !(event.target instanceof HTMLInputElement)) audio.toggleMuted();
     };
     window.addEventListener('keydown', onEscape);
 
@@ -437,6 +462,7 @@ export default function App() {
         wipeout = null;
         sendHome();
         world.player.visible = true;
+        audio.playRespawn();
         setTeleportBackOffer(false); // the Teleport Back offer is only for while the wreck lies there
         setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
       }
@@ -469,6 +495,23 @@ export default function App() {
       // On a training board the bike trembles against the belt; a light breeze shows how fast it's going.
       world.player.userData.rumble?.(trainingPad ? 1 : 0, delta, now / 1000);
       world.wind.update(delta, delta > 0 ? movedDistance / delta : 0, trainingMultiplier);
+      // The engine revs with the bike's speed against its top speed; a training board holds it high, more so
+      // the stronger the board. It falls silent while the rider is wrecked or being sent home.
+      const topSpeed = world.player.userData.moveSpeed || 9;
+      const throttle = trainingPad
+        ? 0.55 + 0.45 * Math.min(1, trainingMultiplier / 25)
+        : Math.min(1, (delta > 0 ? movedDistance / delta : 0) / topSpeed);
+      audio.updateEngine(throttle, !wipeout && !pendingReturn, world.player.userData.grounded !== false);
+      audio.setOnTrack(world.player.position.z < MAP_LAYOUT.room.north); // past the room's north wall: the wave track
+      // The wave roar grows as the nearest wave closes in (heard from WAVE_HEAR_RANGE away), louder for a
+      // bigger wave, and fades quickly once one has passed. It sinks low while the rider lies wrecked.
+      let waveCloseness = 0;
+      for (const wave of world.tsunami.state.waves) {
+        const gap = world.player.position.z - wave.z; // > 0: still coming
+        const reach = gap >= 0 ? 1 - gap / WAVE_HEAR_RANGE : 1 + gap / 40;
+        waveCloseness = Math.max(waveCloseness, reach * (0.75 + 0.25 * Math.min(1, wave.height / 20)));
+      }
+      audio.updateWaves(wipeout ? waveCloseness * 0.25 : waveCloseness);
 
       const trainingState = lockedPremiumBoard ? `locked-${overlappingPad.multiplier}x` : trainingPad;
       if (trainingState !== lastTrainingPad) {
@@ -487,6 +530,7 @@ export default function App() {
         // Zoom back in to the normal chase view if zoomed out, burst confetti, and teleport home after it.
         if (camera.userData.zoomTarget > 1) camera.userData.zoomTarget = 1;
         world.returnBursts.spawn(world.player.position, now / 1000);
+        audio.playWin();
         pendingReturn = { at: now + world.returnBursts.duration * 1000, rewardId: reward.id };
         clearKeys();
         // A big reward's count isn't on its mat (see HIDDEN_COUNT_OVER), so it is told here instead.
@@ -512,6 +556,7 @@ export default function App() {
         hudDirty = true;
         if (levelsGained > 0) {
           syncHud(now);
+          audio.playLevelUp();
           setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });
         }
       }
@@ -561,6 +606,7 @@ export default function App() {
         world.shatter.burst(world.player, world.collision.supportAt(x, z, y), camera.position, now / 1000);
         world.player.visible = false;
         wipeout = { at: now + world.shatter.duration * 1000 };
+        audio.playWipeout();
         clearKeys();
         setTeleportBackOffer(true);
       }
@@ -610,6 +656,10 @@ export default function App() {
       room?.leave();
       updateRoom('');
       gameplayEnd();
+      stopWatchingMute();
+      window.removeEventListener('pointerdown', onButtonPress, true);
+      audio.dispose();
+      audioRef.current = null;
       stopWatchingUser();
       stopWatchingAvatar();
       stopWatchingProportions();
@@ -635,6 +685,15 @@ export default function App() {
       levelProgress: profile.levelProgress,
     }));
   }, [profile]);
+
+  // The engine takes on the equipped bike's sound; changing bikes (not the first one, on load) plays a jingle.
+  const heardBikeRef = useRef(null);
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio && heardBikeRef.current && heardBikeRef.current !== profile.selectedBike) audio.playBikeChange(profile.selectedBike);
+    else audio?.setBike(profile.selectedBike);
+    heardBikeRef.current = profile.selectedBike;
+  }, [profile.selectedBike]);
 
   useEffect(() => {
     const bike = BIKES.find((item) => item.id === profile.selectedBike);
@@ -741,6 +800,15 @@ export default function App() {
     <main className="app-root">
       <canvas ref={canvasRef} className="game-canvas" aria-label="Motorcycle Tsunami Escape starting place" />
       <div id="fps-counter" className="fps-counter" hidden />
+      <button
+        type="button"
+        className={`sound-toggle${muted ? ' muted' : ''}`}
+        aria-label={muted ? 'Unmute sound (M)' : 'Mute sound (M)'}
+        title={muted ? 'Unmute sound (M)' : 'Mute sound (M)'}
+        onClick={(event) => { audioRef.current?.toggleMuted(); event.currentTarget.blur(); }}
+      >
+        {muted ? '🔇' : '🔊'}
+      </button>
       <StartingPlaceHUD
         bikes={BIKES}
         wins={profile.wins}

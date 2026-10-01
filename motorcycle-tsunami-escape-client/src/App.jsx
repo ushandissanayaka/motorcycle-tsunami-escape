@@ -222,7 +222,7 @@ export default function App() {
     let speedPopupAccum = 0;
     let lastSpeedPopupTime = 0;
     const SPEED_POPUP_INTERVAL = 0.35; // seconds between popups, so one shows per short burst of driving instead of every frame
-    const SPEED_POPUP_UNTIL = 1000; // the shoe popups only show while the rider's speed is at most this
+    const SPEED_POPUP_UNTIL = 1000; // on the wave track the shoe popups stop once the rider's speed passes this (the starting place always shows them)
 
     const scheduleReconnect = () => {
       if (cancelled || reconnectTimer) return;
@@ -502,7 +502,8 @@ export default function App() {
         ? 0.55 + 0.45 * Math.min(1, trainingMultiplier / 25)
         : Math.min(1, (delta > 0 ? movedDistance / delta : 0) / topSpeed);
       audio.updateEngine(throttle, !wipeout && !pendingReturn, world.player.userData.grounded !== false);
-      audio.setOnTrack(world.player.position.z < MAP_LAYOUT.room.north); // past the room's north wall: the wave track
+      const onWaveTrack = world.player.position.z < MAP_LAYOUT.room.north; // past the room's north wall
+      audio.setOnTrack(onWaveTrack);
       // The wave roar grows as the nearest wave closes in (heard from WAVE_HEAR_RANGE away), louder for a
       // bigger wave, and fades quickly once one has passed. It sinks low while the rider lies wrecked.
       let waveCloseness = 0;
@@ -562,7 +563,7 @@ export default function App() {
       }
       if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
       const nowSeconds = now / 1000;
-      if (speedProgress > SPEED_POPUP_UNTIL) speedPopupAccum = 0;
+      if (onWaveTrack && speedProgress > SPEED_POPUP_UNTIL) speedPopupAccum = 0;
       if (speedPopupAccum > 0 && nowSeconds - lastSpeedPopupTime > SPEED_POPUP_INTERVAL) {
         world.speedPopups.spawn(world.player.position, SPEED_POPUP_VALUE, nowSeconds, camera.userData.yaw);
         speedPopupAccum = 0;

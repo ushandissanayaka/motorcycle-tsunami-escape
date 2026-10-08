@@ -18,8 +18,10 @@
 # motorcycle-tsunami-escape-server -> Package settings -> Change visibility -> Public),
 # otherwise Legion cannot pull the image.
 #
-# Only the backend (Colyseus server) is deployed for now; the client upload
-# steps get added here once the client is ready for Bloxity.
+# The frontend is a static Vite build. When the Bloxity upload endpoint and token
+# are configured in repo secrets, this workflow uploads the generated bundle to the
+# matching dev/prod game channel. Without them it warns and continues so the
+# backend deploy still works.
 
 name: Deploy to Bloxity
 
@@ -34,9 +36,11 @@ permissions:
 
 env:
   GAME_ID: speed-motorcycle-tsunami-escape
+  GAME_SLUG: motorcycle-tsunami-escape
   IMAGE_OWNER: ushandissanayaka
   IMAGE_NAME: motorcycle-tsunami-escape-server
   SERVER_DIR: ./motorcycle-tsunami-escape-server
+  CLIENT_DIR: ./motorcycle-tsunami-escape-client
 
 jobs:
   deploy:
@@ -163,6 +167,62 @@ jobs:
               exit 1 ;;
             *)
               echo "::error::Legion rollout failed with HTTP $code - see the response above."
+              exit 1 ;;
+          esac
+
+      - name: Set up Node for the client build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
+
+      - name: Build the client bundle
+        working-directory: ${{ env.CLIENT_DIR }}
+        env:
+          VITE_GAME_SLUG: ${{ env.GAME_SLUG }}
+          VITE_SERVER_WS_URL: wss://server.${{ env.GAME_ID }}.dev.play.bloxity.io
+        run: |
+          npm ci
+          npm run build
+
+      - name: Upload the client bundle to Bloxity
+        env:
+          BLOXITY_CLIENT_UPLOAD_URL: ${{ secrets.BLOXITY_CLIENT_UPLOAD_URL }}
+          BLOXITY_CLIENT_UPLOAD_TOKEN: ${{ secrets.BLOXITY_CLIENT_UPLOAD_TOKEN }}
+          CHANNEL: ${{ steps.ch.outputs.channel }}
+          VERSION: ${{ steps.ch.outputs.sha }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BLOXITY_CLIENT_UPLOAD_URL:-}" ] || [ -z "${BLOXITY_CLIENT_UPLOAD_TOKEN:-}" ]; then
+            echo "::warning::Bloxity client upload secrets are not configured; skipping static client upload."
+            echo "Add BLOXITY_CLIENT_UPLOAD_URL and BLOXITY_CLIENT_UPLOAD_TOKEN to the repo secrets to deploy the web bundle."
+            exit 0
+          fi
+
+          archive="${RUNNER_TEMP}/motorcycle-tsunami-escape-client-${CHANNEL}.zip"
+          (cd "${CLIENT_DIR}" && zip -qr "$archive" dist)
+
+          echo "Uploading client bundle for ${GAME_ID} ${CHANNEL} (${VERSION})"
+          body="$(mktemp)"
+          code="$(curl -sS -o "$body" -w '%{http_code}' -X POST "${BLOXITY_CLIENT_UPLOAD_URL}" \
+            --connect-timeout 15 --max-time 180 \
+            -H "Authorization: Bearer ${BLOXITY_CLIENT_UPLOAD_TOKEN}" \
+            -H 'Content-Type: multipart/form-data' \
+            -F "game=${GAME_ID}" \
+            -F "channel=${CHANNEL}" \
+            -F "version=${VERSION}" \
+            -F "file=@${archive}")" || {
+            echo "::error::curl could not reach the Bloxity static upload endpoint."
+            exit 1
+          }
+
+          echo "HTTP $code"
+          echo "--- response ---"; cat "$body"; echo; echo "----------------"
+          case "$code" in
+            2*) echo "Client bundle uploaded." ;;
+            *)
+              echo "::error::Bloxity client upload failed with HTTP $code."
               exit 1 ;;
           esac
 

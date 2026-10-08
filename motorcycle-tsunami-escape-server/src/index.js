@@ -9,6 +9,15 @@ import { legionWebhookHandler } from './webhooks/legionWebhook.js';
 
 const { Server } = colyseus;
 
+// The game's id on hosting.bloxity.io; its client is served from <GAME_ID>.play.bloxity.io (prod) and
+// <GAME_ID>.dev.play.bloxity.io (dev).
+const GAME_ID = 'speed-motorcycle-tsunami-escape';
+const DEFAULT_ORIGINS = [
+  'http://localhost:5173',
+  `https://${GAME_ID}.play.bloxity.io`,
+  `https://${GAME_ID}.dev.play.bloxity.io`,
+].join(',');
+
 const app = express();
 // CLIENT_ORIGIN may list several origins, comma-separated (the game's own host, and the preview/dev hosts).
 const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean);

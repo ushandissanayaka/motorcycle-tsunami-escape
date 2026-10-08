@@ -1,0 +1,175 @@
+# ============================================================
+# Speed Motorcycle Tsunami Escape -> Bloxity Legion (backend)
+# ============================================================
+# Branch -> channel:
+#   dev           -> dev  channel  (https://speed-motorcycle-tsunami-escape.dev.play.bloxity.io)
+#   master / main -> prod channel  (https://speed-motorcycle-tsunami-escape.play.bloxity.io)
+#
+# Repo secrets required (Settings -> Secrets and variables -> Actions):
+#   LEGION_DEPLOY_TOKEN   the deploy token from hosting.bloxity.io
+#   GHCR_PUSH_TOKEN       classic PAT from the IMAGE_OWNER account with write:packages
+#
+# BEFORE THE FIRST RUN: the app must already exist on hosting.bloxity.io with
+# the id below (GAME_ID). Legion has no create-on-deploy; deploying to an app
+# it has never heard of is a 404.
+#
+# ONE-TIME after the first successful run: make the GHCR package
+# `motorcycle-tsunami-escape-server` public (github.com/ushandissanayaka -> Packages ->
+# motorcycle-tsunami-escape-server -> Package settings -> Change visibility -> Public),
+# otherwise Legion cannot pull the image.
+#
+# Only the backend (Colyseus server) is deployed for now; the client upload
+# steps get added here once the client is ready for Bloxity.
+
+name: Deploy to Bloxity
+
+on:
+  push:
+    branches: [master, main, dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  GAME_ID: speed-motorcycle-tsunami-escape
+  IMAGE_OWNER: ushandissanayaka
+  IMAGE_NAME: motorcycle-tsunami-escape-server
+  SERVER_DIR: ./motorcycle-tsunami-escape-server
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the deploy token is present
+        env:
+          LEGION_TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
+        run: |
+          if [ -z "${LEGION_TOKEN:-}" ]; then
+            echo "::error::LEGION_DEPLOY_TOKEN is not set on this repository."
+            echo "Add it under Settings -> Secrets and variables -> Actions."
+            echo "The value is the deploy token from hosting.bloxity.io."
+            exit 1
+          fi
+          echo "Deploy token present (${#LEGION_TOKEN} characters)."
+
+      # Informational only - cannot fail the build. Tells a bad token apart
+      # from a token that is fine but has no app called GAME_ID.
+      - name: Diagnose the token against Legion
+        continue-on-error: true
+        env:
+          LEGION_TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
+          KNOWN_GOOD_APP: squirrel-escape
+        run: |
+          set -uo pipefail
+          probe () {
+            local app="$1" body code
+            body="$(mktemp)"
+            code="$(curl -sS -o "$body" -w '%{http_code}' \
+              --connect-timeout 10 --max-time 30 \
+              -H "Authorization: Bearer ${LEGION_TOKEN}" \
+              "https://legion.bloxity.io/v1/apps/${app}")" || code="000 (unreachable)"
+            printf '  %-34s HTTP %-6s %s\n' "$app" "$code" "$(head -c 160 "$body" | tr -d '\r\n')"
+          }
+          echo "Asking Legion about both apps with the SAME token:"
+          probe "${GAME_ID}"
+          probe "${KNOWN_GOOD_APP}"
+          echo
+          echo "  * both 401  -> the token is wrong, expired, or from another account."
+          echo "  * ${KNOWN_GOOD_APP} ok, ${GAME_ID} 401/404 -> token is valid, but no app"
+          echo "    '${GAME_ID}' exists on Legion yet, or the token is scoped to another game."
+          echo "  * both ok   -> credentials are fine."
+
+      - name: Work out the channel
+        id: ch
+        env:
+          GHCR_PUSH_TOKEN: ${{ secrets.GHCR_PUSH_TOKEN }}
+        run: |
+          if [ "${{ github.ref_name }}" = "dev" ]; then
+            echo "channel=dev" >> "$GITHUB_OUTPUT"
+          else
+            echo "channel=prod" >> "$GITHUB_OUTPUT"
+          fi
+          sha="${GITHUB_SHA::7}"
+          if [ -n "${GHCR_PUSH_TOKEN:-}" ]; then
+            owner="${IMAGE_OWNER,,}"
+            user="${IMAGE_OWNER}"
+            echo "Publishing the image to ghcr.io/${owner} (GHCR_PUSH_TOKEN is set)."
+          else
+            owner="${GITHUB_REPOSITORY_OWNER,,}"
+            user="${{ github.actor }}"
+            echo "::warning::GHCR_PUSH_TOKEN is not set - publishing to ghcr.io/${owner} with GITHUB_TOKEN. If that package is private the rollout will never land (ImagePullBackOff)."
+          fi
+          if [ -z "$sha" ] || [ -z "$owner" ]; then
+            echo "::error::could not work out the image tag (sha='$sha' owner='$owner')"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "owner=$owner" >> "$GITHUB_OUTPUT"
+          echo "ghcr_user=$user" >> "$GITHUB_OUTPUT"
+
+      # ---------- backend (Colyseus server) ----------
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ steps.ch.outputs.ghcr_user }}
+          password: ${{ secrets.GHCR_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Build and push the server image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ env.SERVER_DIR }}
+          push: true
+          tags: ghcr.io/${{ steps.ch.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ steps.ch.outputs.channel }}-${{ steps.ch.outputs.sha }}
+          build-args: |
+            APP_VERSION=${{ steps.ch.outputs.sha }}
+
+      - name: Tell Legion to roll it out
+        env:
+          LEGION_TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
+          IMAGE: ghcr.io/${{ steps.ch.outputs.owner }}/${{ env.IMAGE_NAME }}:${{ steps.ch.outputs.channel }}-${{ steps.ch.outputs.sha }}
+          CHANNEL: ${{ steps.ch.outputs.channel }}
+          VERSION: ${{ steps.ch.outputs.sha }}
+        run: |
+          set -uo pipefail
+          url="https://legion.bloxity.io/v1/apps/${GAME_ID}/deploy"
+          echo "POST $url"
+          echo "  image:   $IMAGE"
+          echo "  channel: $CHANNEL"
+          body="$(mktemp)"
+          code="$(curl -sS -o "$body" -w '%{http_code}' -X POST "$url" \
+            --connect-timeout 15 --max-time 120 \
+            --retry 3 --retry-connrefused --retry-delay 5 \
+            -H "Authorization: Bearer ${LEGION_TOKEN}" \
+            -H 'Content-Type: application/json' \
+            -d "$(printf '{"channel":"%s","image":"%s","version":"%s","seatCap":60,"maxReplicas":5}' \
+                  "$CHANNEL" "$IMAGE" "$VERSION")")" || {
+            echo "::error::curl could not reach Legion at all (network/DNS)."
+            exit 1
+          }
+          echo "HTTP $code"
+          echo "--- response ---"; cat "$body"; echo; echo "----------------"
+          case "$code" in
+            2*) echo "Rollout accepted." ;;
+            401|403)
+              echo "::error::Legion rejected the token (HTTP $code). LEGION_DEPLOY_TOKEN is wrong, expired, or belongs to a different account."
+              exit 1 ;;
+            404)
+              echo "::error::Legion has no app called '${GAME_ID}' (HTTP 404). Create it on hosting.bloxity.io first."
+              exit 1 ;;
+            *)
+              echo "::error::Legion rollout failed with HTTP $code - see the response above."
+              exit 1 ;;
+          esac
+
+      - name: Where it went
+        run: |
+          if [ "${{ steps.ch.outputs.channel }}" = "prod" ]; then
+            echo "Play: https://${GAME_ID}.play.bloxity.io"
+          else
+            echo "Play: https://${GAME_ID}.dev.play.bloxity.io"
+          fi

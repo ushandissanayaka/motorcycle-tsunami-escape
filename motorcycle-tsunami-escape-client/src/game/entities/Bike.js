@@ -110,6 +110,9 @@ export function createBike(color = DEFAULT_COLOR) {
   const rear = createRearWheel(bodyMaterial, glowMaterial, navyMaterial);
   rear.position.set(0, REAR.r, REAR.z);
   bike.add(front, rear);
+  // A ridden bike rolls these (see wheelSpin.js).
+  Object.assign(front.userData, { wheelRadius: FRONT.r, halfWidth: 0.08 });
+  Object.assign(rear.userData, { wheelRadius: REAR.r, halfWidth: 0.19 });
 
   // One rounded blue body between the wheels: a bulbous crescent that swells into a hump over
   // the rear and dips into a seat, with a dark strip along the top.

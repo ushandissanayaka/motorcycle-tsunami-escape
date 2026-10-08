@@ -10,6 +10,8 @@
 html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
 .app-root { position: relative; width: 100vw; height: 100vh; background: #9bdcff; }
 .game-canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; touch-action: none; }
+.fps-counter { position: absolute; z-index: 9; bottom: 8px; left: 8px; padding: 2px 8px; border-radius: 6px; background: rgb(0 0 0 / 55%); color: #b8ffb0; font: 600 12px/1.4 ui-monospace, Consolas, monospace; pointer-events: none; }
+.fps-counter[hidden] { display: none; }
 .hud-overlay { position: absolute; inset: 0; pointer-events: none; }
 .hud-overlay button { pointer-events: auto; }
 
@@ -77,3 +79,7 @@ html, body, #root { width: 100%; height: 100%; margin: 0; overflow: hidden; }
   .controls-hint { right: 12px; bottom: 16px; flex-direction: column; gap: 4px; }
   .controls-hint span { padding: 6px 8px; }
 }
+
+.sound-toggle { position: absolute; z-index: 9; right: 14px; bottom: 14px; display: grid; width: 42px; height: 42px; place-items: center; padding: 0; border: 2px solid #ffffffb0; border-radius: 50%; background: rgb(10 20 35 / 55%); font-size: 20px; line-height: 1; cursor: pointer; box-shadow: 0 3px 10px rgb(0 0 0 / 30%); transition: transform .12s ease, background .12s ease; }
+.sound-toggle:hover { transform: scale(1.08); background: rgb(10 20 35 / 75%); }
+.sound-toggle.muted { opacity: .75; }

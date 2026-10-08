@@ -1,0 +1,58 @@
+/* Bloxity account, in the top-right corner above Daily Rewards / Wheelspin, drawn like the reference: a dark navy pill
+   with the player's picture in a pale ring, their name, and "Guest" (or their Bux) under it. Sizes are
+   reference-screenshot pixels times --u (see StartingPlaceHUD.css), with floors for small screens. */
+.account-panel {
+  position: absolute; z-index: 6; top: calc(8 * var(--u)); right: calc(12 * var(--u));
+  display: flex; flex-direction: column; align-items: flex-end;
+  pointer-events: auto; font-family: 'Fredoka', 'Arial Black', Arial, sans-serif; font-weight: 700;
+}
+.account-panel button { font: inherit; cursor: pointer; }
+
+.account-chip {
+  display: flex; align-items: center; gap: max(calc(10 * var(--u)), 6px);
+  height: max(calc(56 * var(--u)), 38px); max-width: max(calc(300 * var(--u)), 190px);
+  padding: 0 max(calc(20 * var(--u)), 12px) 0 max(calc(5 * var(--u)), 3px);
+  border: max(calc(2 * var(--u)), 1.5px) solid #16121f; border-radius: 999px;
+  background: rgb(38 32 58 / 92%); color: #fff; text-align: left;
+  box-shadow: 0 calc(3 * var(--u)) calc(8 * var(--u)) rgb(0 0 0 / 30%);
+  transition: scale .1s ease, filter .1s ease;
+}
+.account-chip:hover { scale: 1.04; filter: brightness(1.12); }
+.account-chip:active { scale: .97; }
+.account-chip img {
+  flex: none; box-sizing: border-box; width: max(calc(46 * var(--u)), 31px); height: max(calc(46 * var(--u)), 31px);
+  border: max(calc(2 * var(--u)), 1.5px) solid #a9a6b8; border-radius: 50%; object-fit: cover; background: #2b2640;
+}
+.account-text { display: grid; min-width: 0; line-height: 1.12; }
+.account-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: max(calc(22 * var(--u)), 14px); color: #fff; }
+.account-sub { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: max(calc(17 * var(--u)), 11px); color: #b9b6c6; }
+.account-sub .bux-icon { width: 1em; height: 1em; }
+
+.account-menu {
+  box-sizing: border-box; width: min(calc(460 * var(--u)), calc(100vw - 32px)); min-width: 260px;
+  margin-top: max(calc(10 * var(--u)), 6px); padding: max(calc(18 * var(--u)), 12px);
+  border-radius: max(calc(16 * var(--u)), 10px); background: rgb(24 26 33 / 94%); color: #eef0f5;
+  font-size: max(calc(20 * var(--u)), 13px); box-shadow: 0 12px 36px #0008;
+}
+.account-menu header { display: grid; gap: 2px; margin-bottom: 10px; }
+.account-menu header strong { font-size: 1.3em; }
+.account-menu header small, .account-friend small { color: #a8adbb; }
+.account-menu h3 { margin: 6px 0 8px; font-size: 1em; color: #c9cddb; }
+.account-friends { display: grid; gap: 8px; max-height: min(calc(360 * var(--u)), 40vh); min-height: 40px; overflow-y: auto; }
+.account-empty { margin: 4px 0; color: #a8adbb; }
+.account-friend { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+.account-friend img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; background: #1b1d24; }
+.account-friend div { display: grid; min-width: 0; }
+.account-friend strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presence::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: #6b7080; }
+.presence-online::before { background: #3ddc4a; }
+.presence-in-game::before { background: #4aa8ff; }
+.presence-away::before { background: #ffc93a; }
+.account-friend button, .account-actions button {
+  padding: 6px 12px; border: 0; border-radius: 8px; background: #335fff; color: #fff; font-size: .9em;
+}
+.account-friend button:hover, .account-actions button:hover { background: #4770ff; }
+.account-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.account-actions .account-logout { background: #3a3e4c; }
+.account-actions .account-logout:hover { background: #4a4f60; }
+.account-panel button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

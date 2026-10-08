@@ -1,0 +1,90 @@
+/* Menu popups (Shop, Rebirth, Trails, Worlds). Sizes are reference-screenshot pixels times --u. */
+.menu-popup { position: absolute; z-index: 6; pointer-events: auto; user-select: none; }
+.menu-popup img { display: block; pointer-events: none; user-select: none; }
+.menu-popup-shell { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.menu-popup-scroll {
+  position: absolute; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain;
+  border-radius: 0 0 calc(15 * var(--u)) calc(15 * var(--u));
+  background-color: #fff; background-size: calc(29 * var(--u)) calc(29 * var(--u)); background-attachment: local;
+  scrollbar-width: thin; scrollbar-color: #c3c3c3 transparent;
+}
+.menu-popup-scroll::-webkit-scrollbar { width: calc(8 * var(--u)); }
+.menu-popup-scroll::-webkit-scrollbar-track { background: transparent; }
+.menu-popup-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: #c3c3c3; }
+.menu-popup-content { position: relative; }
+
+.popup-title { position: absolute; }
+
+/* Cards pop up a little under the cursor (the reference shows the hovered card ~2.5% larger). */
+.popup-card { position: absolute; display: block; padding: 0; border: 0; background: none; transition: scale .12s ease; }
+button.popup-card { cursor: pointer; }
+.popup-card:hover { z-index: 1; scale: 1.025; }
+button.popup-card:active { scale: .98; }
+.popup-card > img:first-child { width: 100%; height: 100%; }
+.popup-card:focus-visible, .menu-popup-close:focus-visible { outline: calc(3 * var(--u)) solid #fff; outline-offset: calc(2 * var(--u)); }
+.world-teleport { position: absolute; border-radius: calc(12 * var(--u)); }
+
+.menu-popup-close { position: absolute; z-index: 2; padding: 0; border: 0; background: none; cursor: pointer; transition: scale .1s ease, filter .1s ease; }
+.menu-popup-close:hover { scale: 1.06; filter: brightness(1.08); }
+.menu-popup-close:active { scale: .94; }
+.menu-popup-close img { width: 100%; height: 100%; }
+
+/* Live captions share the HUD's white-fill / black-outline letter style. */
+.inventory-name, .inventory-speed, .inventory-equip span, .daily-timer, .wheel-spin-button span, .pets-empty {
+  position: absolute; color: #fff; font-family: 'Montserrat', 'Arial Black', Arial, sans-serif; font-weight: 800;
+  line-height: 1; white-space: nowrap; paint-order: stroke fill; pointer-events: none;
+}
+
+/* Inventory */
+.inventory-card-body { position: absolute; left: calc(4 * var(--u)); top: calc(4 * var(--u)); width: calc(620 * var(--u)); height: calc(165 * var(--u)); }
+.inventory-card-body > img { position: absolute; }
+.inventory-name { transform: translateY(-50%); font-size: calc(34 * var(--u)); -webkit-text-stroke: calc(6 * var(--u)) #000; }
+.inventory-speed { transform: translateY(-50%); font-size: calc(33 * var(--u)); -webkit-text-stroke: calc(6 * var(--u)) #000; }
+.inventory-equip { position: absolute; padding: 0; border: 0; background: none; cursor: pointer; transition: scale .12s ease, filter .12s ease; }
+.inventory-equip:hover { scale: 1.04; }
+.inventory-equip:active { scale: .96; }
+.inventory-equip img { width: 100%; height: 100%; }
+.inventory-equip span { top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: calc(29 * var(--u)); -webkit-text-stroke: calc(5 * var(--u)) #000; }
+.inventory-equip.is-equipped { filter: saturate(.35) brightness(.92); cursor: default; }
+.inventory-equip.is-equipped span { font-size: calc(25 * var(--u)); }
+
+/* Daily Rewards */
+.daily-timer { left: 50%; transform: translate(-50%, -50%); -webkit-text-stroke: calc(5 * var(--u)) #000; }
+.popup-card.daily-claimed > img:first-child { filter: brightness(.5) saturate(.55) hue-rotate(-15deg); }
+.daily-check { position: absolute; left: 50%; top: 52%; width: calc(124 * var(--u)); height: calc(101 * var(--u)); transform: translate(-50%, -50%); }
+
+/* Wheelspin: no frame - the wheel, buy buttons and spin button float over the HUD */
+.wheel-overlay { inset: 0; }
+.wheel-backdrop { position: absolute; inset: 0; }
+.wheel-part { position: absolute; }
+.wheel-disc { transition-property: transform; transition-timing-function: cubic-bezier(.12, .62, .08, 1); will-change: transform; }
+.wheel-spin-button { left: calc(50% - 148 * var(--u)); bottom: calc(110 * var(--u)); width: calc(296 * var(--u)); height: calc(99 * var(--u)); }
+.wheel-spin-button span { top: 50%; left: 50%; transform: translate(-50%, -52%); font-size: calc(50 * var(--u)); -webkit-text-stroke: calc(9 * var(--u)) #000; }
+.wheel-free-spin {
+  position: absolute; left: calc(50% + 22 * var(--u)); bottom: calc(78.5 * var(--u)); transform: translate(-50%, 50%);
+  color: #fff97f; font-family: 'Fredoka', 'Lilita One', Arial, sans-serif; font-weight: 700; font-size: calc(35 * var(--u));
+  line-height: 1; white-space: nowrap; -webkit-text-stroke: calc(8 * var(--u)) #000; paint-order: stroke fill; pointer-events: none;
+}
+
+/* Pets */
+.pets-title {
+  position: absolute; color: #fff; font-family: 'Fredoka', 'Lilita One', Arial, sans-serif; font-weight: 700; line-height: 1;
+  -webkit-text-stroke: calc(13 * var(--u)) #000; paint-order: stroke fill; transform: rotate(-4deg); transform-origin: left bottom; pointer-events: none;
+}
+.pets-search {
+  position: absolute; box-sizing: border-box; padding: 0 0 0 calc(10 * var(--u)); border: 0; outline: 0; background: #fff; color: #4a4a4a;
+  font-family: 'Montserrat', Arial, sans-serif; font-weight: 800;
+}
+.pets-search::placeholder { color: #9c9c9c; opacity: 1; }
+.pets-empty { text-align: center; color: #b5b5b5; -webkit-text-stroke: 0; }
+
+/* Rebirth level bar: grey track, green fill clipped to the live progress, live text on top. */
+.rebirth-bar { position: absolute; }
+.rebirth-bar img { position: absolute; inset: 0; width: 100%; height: 100%; }
+.rebirth-bar-edge { position: absolute; top: calc(3 * var(--u)); bottom: calc(3 * var(--u)); width: calc(3 * var(--u)); background: #1b1b1b; }
+.rebirth-bar-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  color: #fff; font-family: 'Montserrat', 'Arial Black', Arial, sans-serif; font-weight: 800; font-size: calc(35 * var(--u));
+  line-height: 1; white-space: nowrap; -webkit-text-stroke: calc(6 * var(--u)) #111; paint-order: stroke fill;
+}

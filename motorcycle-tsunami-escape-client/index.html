@@ -4,10 +4,103 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Motorcycle Tsunami Escape</title>
+    <!-- Display font of the wave name tags; they fall back to Arial Black if it cannot load. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Fredoka:wght@700&family=Montserrat:wght@800&display=swap" rel="stylesheet" />
     <!-- Pinned v1 build for production stability -->
     <script src="https://sdk.bloxity.io/v1/legion-sdk.min.js"></script>
+    <script>
+      // Show the splash once per tab. A reconnect-triggered document reload must not flash it again.
+      try {
+        const splashSeenKey = 'mte-loading-screen-seen';
+        if (sessionStorage.getItem(splashSeenKey)) {
+          document.documentElement.classList.add('skip-initial-loading');
+        } else {
+          sessionStorage.setItem(splashSeenKey, '1');
+        }
+      } catch {}
+    </script>
+    <!-- Loading screen: plain HTML so it paints before the game's scripts have even arrived; the game fades it
+         out once everything is loaded (see src/ui/loadingScreen.js), and fills its bar as it goes (see
+         src/bloxity/lifecycle.js). Drawn in the game's own style: its art, its chunky outlined lettering and a
+         bar like the HUD's level bar. Sizes are 1920 x 1001 layout pixels, scaled by --u to fit any screen. -->
+    <style>
+      #loading-screen {
+        --u: min(calc(100vw / 1920), calc(100vh / 1001));
+        --progress: 0.08;
+        position: fixed; inset: 0; z-index: 1000; overflow: hidden; background: #0d1a2a;
+        font-family: "Lilita One", "Fredoka", "Arial Black", Arial, sans-serif;
+        transition: opacity 0.45s ease; }
+      .skip-initial-loading #loading-screen { display: none; }
+      #loading-screen.loading-screen--done { opacity: 0; pointer-events: none; }
+      #loading-screen .loading-bg {
+        position: absolute; inset: 0;
+        background: url(/loading/background.jpg) center / cover no-repeat; }
+      /* Darker toward the middle and bottom, so the title and bar stand out from the art. */
+      #loading-screen .loading-shade {
+        position: absolute; inset: 0;
+        background: radial-gradient(ellipse at 50% 45%, rgb(8 16 32 / 55%), rgb(8 16 32 / 20%) 70%),
+          linear-gradient(transparent 55%, rgb(6 12 26 / 75%)); }
+      #loading-screen .loading-content {
+        position: absolute; left: 50%; top: 47%; transform: translate(-50%, -50%);
+        width: min(92vw, calc(1100 * var(--u))); display: flex; flex-direction: column; align-items: center; }
+      #loading-screen .loading-icon {
+        width: max(calc(220 * var(--u)), 104px); height: max(calc(220 * var(--u)), 104px);
+        border: max(calc(8 * var(--u)), 4px) solid #fff; border-radius: max(calc(40 * var(--u)), 18px);
+        box-shadow: 0 0 0 max(calc(6 * var(--u)), 3px) #10131c, 0 calc(14 * var(--u)) calc(30 * var(--u)) rgb(0 0 0 / 55%);
+        transform: rotate(-4deg); }
+      #loading-screen .loading-title {
+        margin: max(calc(34 * var(--u)), 16px) 0 0; text-align: center; font-weight: 400; line-height: 0.98;
+        font-size: max(calc(96 * var(--u)), 38px); letter-spacing: 0.01em; text-transform: uppercase; }
+      /* Each line: gradient letters, with a heavy outline behind them drawn by a copy of the line. */
+      #loading-screen .loading-title span {
+        position: relative; display: block; color: transparent;
+        background: linear-gradient(#fff36b 25%, #ffb400 80%); -webkit-background-clip: text; background-clip: text; }
+      #loading-screen .loading-title span::before {
+        content: attr(data-text); position: absolute; inset: 0; z-index: -1; color: #10131c;
+        -webkit-text-stroke: max(calc(18 * var(--u)), 8px) #10131c;
+        text-shadow: 0 max(calc(8 * var(--u)), 4px) 0 #10131c; }
+      #loading-screen .loading-title .second { background-image: linear-gradient(#bff3ff 25%, #36b4ff 80%); }
+      #loading-screen .loading-creator {
+        margin: max(calc(14 * var(--u)), 8px) 0 0; font-size: max(calc(26 * var(--u)), 13px); color: #fff;
+        -webkit-text-stroke: max(calc(6 * var(--u)), 3px) #10131c; paint-order: stroke fill; }
+      #loading-screen .loading-bar {
+        box-sizing: border-box; width: min(86vw, calc(760 * var(--u))); height: max(calc(46 * var(--u)), 22px);
+        margin-top: max(calc(40 * var(--u)), 18px); padding: max(calc(6 * var(--u)), 3px);
+        border: max(calc(5 * var(--u)), 3px) solid #10131c; border-radius: 999px; background: #e9ecf3;
+        box-shadow: 0 calc(6 * var(--u)) 0 #10131c; }
+      #loading-screen .loading-fill {
+        width: calc(var(--progress) * 100%); height: 100%; border-radius: 999px;
+        background: linear-gradient(#7fe0ff, #1f8cff); transition: width 0.4s ease; }
+      #loading-screen .loading-status {
+        margin-top: max(calc(18 * var(--u)), 9px); font-size: max(calc(30 * var(--u)), 14px); color: #fff;
+        -webkit-text-stroke: max(calc(7 * var(--u)), 3px) #10131c; paint-order: stroke fill; }
+      /* "Play on Bloxity", bottom right. */
+      #loading-screen .loading-platform {
+        position: absolute; right: max(calc(28 * var(--u)), 12px); bottom: max(calc(24 * var(--u)), 12px);
+        display: flex; align-items: center; gap: max(calc(10 * var(--u)), 6px);
+        padding: max(calc(10 * var(--u)), 6px) max(calc(20 * var(--u)), 12px); border-radius: 999px;
+        background: rgb(20 22 30 / 88%); color: #c9ccd6; font: 600 max(calc(20 * var(--u)), 12px) "Montserrat", "Segoe UI", Arial, sans-serif; }
+      #loading-screen .loading-platform strong { display: flex; align-items: center; gap: max(calc(7 * var(--u)), 4px); color: #fff; font-weight: 800; }
+      #loading-screen .loading-platform svg { width: max(calc(26 * var(--u)), 15px); height: auto; }
+    </style>
   </head>
   <body style="margin:0; overflow:hidden; background:#000;">
+    <div id="loading-screen" role="status" aria-label="Loading Speed Motorcycle Tsunami Escape">
+      <div class="loading-bg"></div>
+      <div class="loading-shade"></div>
+      <div class="loading-content">
+        <img class="loading-icon" src="/loading/icon.jpg" alt="" />
+        <h1 class="loading-title"><span data-text="Speed Motorcycle">Speed Motorcycle</span><span class="second" data-text="Tsunami Escape">Tsunami Escape</span></h1>
+        <p class="loading-creator">by TwistPlay</p>
+        <div class="loading-bar"><div class="loading-fill"></div></div>
+        <div class="loading-status">Starting up</div>
+      </div>
+      <div class="loading-platform">Play on
+        <strong><svg viewBox="0 0 26 28" aria-hidden="true"><path fill="#ffc400" fill-rule="evenodd" d="M3.62 2.25 L3.25 2.50 L2.31 5.62 L2.12 7.19 L2.12 12.62 L2.75 15.38 L3.62 16.62 L4.56 16.94 L5.06 17.31 L5.00 19.12 L6.19 20.56 L6.62 20.81 L8.38 20.81 L10.00 20.56 L10.38 20.81 L9.94 21.38 L8.62 21.88 L8.25 22.31 L8.38 22.94 L9.25 23.94 L10.31 24.81 L12.81 25.88 L14.31 25.75 L16.44 24.44 L17.75 23.00 L17.88 22.31 L17.50 21.88 L16.25 21.69 L14.81 21.00 L12.12 21.00 L11.12 20.81 L11.00 20.56 L11.88 19.56 L11.94 18.62 L11.12 17.19 L11.06 16.62 L11.38 16.19 L12.19 15.94 L13.75 15.94 L14.69 16.19 L15.06 16.62 L15.06 17.06 L14.19 18.62 L14.12 19.25 L14.44 19.81 L15.00 20.06 L15.88 20.19 L17.56 20.81 L19.38 20.81 L20.75 19.69 L21.12 18.88 L20.94 17.38 L21.31 17.00 L22.31 16.62 L22.75 16.19 L23.19 15.31 L23.75 13.19 L23.81 7.19 L22.81 2.81 L22.25 2.19 L20.94 2.12 L18.06 3.75 L16.62 3.94 L15.25 2.75 L13.56 2.12 L12.31 2.06 L10.81 2.69 L9.69 3.75 L9.00 3.94 L7.38 3.19 L5.94 2.88 L4.56 2.25 Z M6.19 8.62 L6.62 8.25 L7.25 8.19 L9.25 8.69 L10.31 8.75 L10.94 9.38 L10.88 10.38 L10.25 11.19 L9.50 11.44 L8.31 10.56 L6.44 9.81 L6.12 9.31 Z M19.75 8.50 L19.81 9.31 L19.50 9.75 L17.69 10.56 L16.56 11.44 L16.12 11.38 L15.19 10.19 L15.19 9.31 L15.69 8.88 L18.38 8.12 L19.25 8.12 Z"/></svg>Bloxity</strong>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>

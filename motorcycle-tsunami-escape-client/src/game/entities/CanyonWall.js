@@ -4,7 +4,7 @@ import { MAP_LAYOUT } from '../../shared/constants.js';
 import { makeStudTexture, mulberry32 } from '../util/textures.js';
 
 // Salmon studded rock under bright studded grass caps that overhang the rock
-// and drip down in jagged clumps (Roblox terrain look).
+// and drip down in jagged clumps (a blocky terrain look).
 const ROCK = { base: '#dc7c6e', light: '#f5a294', dark: '#b45a52' };
 const GRASS = { base: '#6ccb4b', light: '#93e46f', dark: '#3f9c32' };
 const ROCK_TINTS = [0xffffff, 0xf6dcd4, 0xffe6de, 0xeecbc3, 0xfff0ea];
@@ -52,7 +52,7 @@ function makeSolid({ width, height, depth, taper = 1, position, yaw = 0, tint })
  */
 function addMesa({ center, width, depth, height, yaw, rand, rock, grass }) {
   const taper = 0.9 + rand() * 0.1;
-  const bottom = -3;
+  const bottom = -10; // the cliffs hang down into the clouds around the map
   const totalHeight = height - bottom;
 
   rock.push(
@@ -129,19 +129,19 @@ function addMesa({ center, width, depth, height, yaw, rand, rock, grass }) {
  * wall would poke into the open floor.
  */
 function outlineEdges({ room, corridor }) {
-  const { halfWidth: rw, north: rn, south: rs } = room;
+  const { west: rw, east: re, north: rn, south: rs } = room;
   const { halfWidth: cw, north: cn } = corridor;
   const v = (x, z) => new THREE.Vector2(x, z);
-  const edge = (a, b, outward, extendA, extendB) => ({ a, b, outward, extendA, extendB });
+  const edge = (a, b, outward, extendA, extendB, lowProfile = false) => ({ a, b, outward, extendA, extendB, lowProfile });
   return [
-    edge(v(-rw, rs), v(rw, rs), v(0, 1), true, true), // room south
+    edge(v(-rw, rs), v(re, rs), v(0, 1), true, true), // room south
     edge(v(-rw, rs), v(-rw, rn), v(-1, 0), true, true), // room west (bike store side)
-    edge(v(rw, rs), v(rw, rn), v(1, 0), true, true), // room east (training side)
+    edge(v(re, rs), v(re, rn), v(1, 0), true, true), // room east (training side)
     edge(v(-rw, rn), v(-cw, rn), v(0, -1), true, false), // room north, left of the corridor
-    edge(v(cw, rn), v(rw, rn), v(0, -1), false, true), // room north, right of the corridor
+    edge(v(cw, rn), v(re, rn), v(0, -1), false, true), // room north, right of the corridor
     // The corridor's north end is left open: no wall there, so the wave place looks out to the sky.
-    edge(v(-cw, rn), v(-cw, cn), v(-1, 0), false, false), // corridor west
-    edge(v(cw, rn), v(cw, cn), v(1, 0), false, false), // corridor east
+    edge(v(-cw, rn), v(-cw, cn), v(-1, 0), false, false, true), // low corridor west wall; leave sky visible above it
+    edge(v(cw, rn), v(cw, cn), v(1, 0), false, false, true), // low corridor east wall
   ];
 }
 
@@ -178,8 +178,11 @@ export function createCanyonWall({ layout = MAP_LAYOUT, seed = 7 } = {}) {
           width = 8;
           last = true;
         }
-        const depth = 10 + rand() * 8;
-        const height = layer.minHeight + rand() * (layer.maxHeight - layer.minHeight);
+        const depth = edge.lowProfile ? 16 + rand() * 8 : 10 + rand() * 8; // the corridor's cliffs are broad, with the sky beyond them
+        // The corridor's walls stay low enough to keep the sky in view, but step up and down: a short front row and a taller row behind it.
+        const height = edge.lowProfile
+          ? (layer.offset === 0 ? 6 + rand() * 7 : 11 + rand() * 8)
+          : layer.minHeight + rand() * (layer.maxHeight - layer.minHeight);
         const inner = layer.offset + rand() * layer.offsetJitter;
 
         const point = edge.a.clone().addScaledVector(along, cursor + width / 2).addScaledVector(edge.outward, inner + depth / 2);
@@ -214,6 +217,11 @@ export function createCanyonWall({ layout = MAP_LAYOUT, seed = 7 } = {}) {
   };
   const rockMesh = new THREE.Mesh(mergeGeometries(rock), studMaterial(ROCK, 11, 0.95));
   const grassMesh = new THREE.Mesh(mergeGeometries(grass), studMaterial(GRASS, 23, 0.9));
+  // The tall walls throw long shadows across the floor and catch the shadows of the things in front of them.
+  for (const mesh of [rockMesh, grassMesh]) {
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+  }
   group.add(rockMesh, grassMesh);
   return group;
 }

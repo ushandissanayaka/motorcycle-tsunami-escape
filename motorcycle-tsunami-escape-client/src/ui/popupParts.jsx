@@ -11,8 +11,15 @@ export const rect = ([x0, y0, x1, y1], m = 0) => {
   const [l, t, r, b] = Array.isArray(m) ? m : [m, m, m, m];
   return { left: px(x0 - l), top: px(y0 - t), width: px(x1 - x0 + l + r), height: px(y1 - y0 + t + b) };
 };
-// Every popup sits on the Shop popup's centre line from the reference (x 959.5, y 469.5 of 1004).
-export const frame = (w, h) => ({ width: px(w), height: px(h), left: `calc(50% - ${px(w / 2)})`, top: `calc(50% + ${px(469.5 - 502 - h / 2)})` });
+// Every popup sits on the Shop popup's centre line from the reference (x 959.5, y 469.5 of 1004). Its own --u is
+// the HUD's, shrunk when needed so the whole popup (`reach`: its height plus anything hanging below it) fits on
+// screen with a margin; everything inside is measured in that --u, so it all scales together.
+const POPUP_MARGIN = 24;
+export const frame = (w, h, reach = h) => ({
+  '--u': `min(var(--hud-u), calc((100vw - ${POPUP_MARGIN}px) / ${w}), calc((100vh - ${POPUP_MARGIN}px) / ${reach}))`,
+  width: px(w), height: px(h), left: `calc(50% - ${px(w / 2)})`,
+  top: `max(${POPUP_MARGIN / 2}px, calc(50% + ${px(469.5 - 502 - h / 2)}))`,
+});
 
 // Blur after a click so SPACE (hop) never re-triggers the button that was just pressed.
 export const press = (action) => (event) => {
@@ -30,9 +37,9 @@ export function Card({ art, box, m = 4, onClick, className = '', style, children
   );
 }
 
-export function Popup({ size, top, shell, close, closeBox, label, viewport, contentHeight, onClose, children, after }) {
-  const style = frame(...size);
-  if (top !== undefined) style.top = px(top);
+export function Popup({ size, reach, top, shell, close, closeBox, label, viewport, contentHeight, onClose, children, after }) {
+  const style = frame(...size, reach);
+  if (top !== undefined) style.top = `max(${POPUP_MARGIN / 2}px, min(${px(top)}, calc(100% - ${POPUP_MARGIN / 2}px - ${px(reach ?? size[1])})))`;
   return (
     <section className="menu-popup" style={style} role="dialog" aria-label={label}>
       <img className="menu-popup-shell" src={shell} alt="" draggable={false} />

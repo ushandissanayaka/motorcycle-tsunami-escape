@@ -46,10 +46,12 @@ export const RED_REWARD_LEVEL = 100;
 // A yellow mat worth more than this shows just its trophy, not its count: the count is told in a message
 // when the rider collects it (see App.jsx).
 export const HIDDEN_COUNT_OVER = 100;
-// Yellow wins per pit: a quick start (EARLY_WINS), then just one more per pit, so riding far out pays a little
-// more each time instead of piling up wins fast enough to buy everything at once. Red is double.
-const EARLY_WINS = [1, 3, 5, 8];
-const yellowWins = (pit) => (pit < EARLY_WINS.length ? EARLY_WINS[pit] : EARLY_WINS.at(-1) + pit - EARLY_WINS.length + 1);
+// Yellow wins per pit: a small start (EARLY_WINS), then one more every second pit, so riding far out pays a little
+// more each time instead of piling up wins fast enough to buy every bike at once. Red is double.
+const EARLY_WINS = [1, 2, 3, 4];
+const yellowWins = (pit) => (pit < EARLY_WINS.length
+  ? EARLY_WINS[pit]
+  : EARLY_WINS.at(-1) + Math.floor((pit - EARLY_WINS.length) / 2) + 1);
 const REWARD_LABEL_SIZE = { width: 5.2, height: 2.6, y: 1.9, inset: 0.7 }; // world units, over the mat (inset: toward the track centre, clear of the wall)
 const RETURN_LABEL_SIZE = { width: 4.8, height: 1.2, y: 3.4 };
 const VIP_PANEL = { width: 7, height: 5, chance: 0.45 }; // a VIP board on this share of slabs, on a random side

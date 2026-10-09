@@ -1,9 +1,10 @@
-// Each level needs 50 more speed progress than the previous level.
-const LEVEL_BASE = 1000;
+// Each level needs LEVEL_STEP more speed progress than the previous level.
+const LEVEL_BASE = 2500;
+const LEVEL_STEP = 150;
 
-/** Speed progress needed per level: 1000, 1050, 1100, 1150, ... */
+/** Speed progress needed per level: 2500, 2650, 2800, 2950, ... */
 export function levelTarget(level) {
-  return LEVEL_BASE + (level - 1) * 50;
+  return LEVEL_BASE + (level - 1) * LEVEL_STEP;
 }
 
 /**
@@ -12,14 +13,15 @@ export function levelTarget(level) {
  * grant (a speed pack, a long AFK stretch, a big debug/testing bonus) could ask the equivalent of a
  * one-level-at-a-time loop for millions of iterations — this solves the same arithmetic-series sum in
  * closed form instead, so the cost stays flat no matter how big the jump is. `levelTarget` is a plain
- * arithmetic sequence (LEVEL_BASE + 50 per level up), so the levels-gained count is the positive root of
+ * arithmetic sequence (LEVEL_BASE + LEVEL_STEP per level up), so the levels-gained count is the positive root of
  * a quadratic; a small integer correction afterwards guards against floating-point rounding at the edge.
  */
 export function applyLevelProgress(levelProgress, earnedSpeed, riderLevel) {
   const total = levelProgress + earnedSpeed;
-  const b = levelTarget(riderLevel) - 25; // from expanding the sum below: sum_{k=0}^{n-1} levelTarget(riderLevel+k) = b*n + 25n²
-  const sumOf = (n) => n * b + 25 * n * n; // sum_{k=0}^{n-1} levelTarget(riderLevel + k)
-  let levelsGained = Math.max(0, Math.floor((-b + Math.sqrt(b * b + 100 * total)) / 50));
+  const half = LEVEL_STEP / 2;
+  const b = levelTarget(riderLevel) - half; // from expanding the sum below: sum_{k=0}^{n-1} levelTarget(riderLevel+k) = b*n + (STEP/2)n²
+  const sumOf = (n) => n * b + half * n * n; // sum_{k=0}^{n-1} levelTarget(riderLevel + k)
+  let levelsGained = Math.max(0, Math.floor((-b + Math.sqrt(b * b + 4 * half * total)) / (2 * half)));
   while (levelsGained > 0 && sumOf(levelsGained) > total) levelsGained -= 1;
   while (sumOf(levelsGained + 1) <= total) levelsGained += 1;
   return { levelsGained, levelProgress: total - sumOf(levelsGained) };
@@ -111,16 +113,16 @@ export const BOOST_PADS = [
 export const BIKES = [
   // Lower level
   { id: 'bike_scooter', name: 'Starter Scooter', tier: 'lower', slot: 0, stepBonus: 1, winsRequired: 0, speed: 9, color: 0x3ed46b, rideColor: 0x1f6fe0 },
-  { id: 'bike_trail', name: 'Trail Rider', tier: 'lower', slot: 1, stepBonus: 2, winsRequired: 3, speed: 9.5, color: 0x2a6fe0 },
-  { id: 'bike_azure', name: 'Azure Cycle', tier: 'lower', slot: 2, stepBonus: 5, winsRequired: 15, speed: 10, color: 0x2a5fff },
-  { id: 'bike_cruiser_red', name: 'Red Cruiser', tier: 'lower', slot: 3, stepBonus: 25, winsRequired: 100, speed: 11, color: 0xd8323c },
-  { id: 'bike_cruiser_violet', name: 'Violet Cruiser', tier: 'lower', slot: 4, stepBonus: 50, winsRequired: 500, speed: 12, color: 0x8b4fd0 },
-  { id: 'bike_cyan_bolt', name: 'Cyan Bolt', tier: 'lower', slot: 5, stepBonus: 100, winsRequired: 2500, speed: 13, color: 0x1fbde0 },
+  { id: 'bike_trail', name: 'Trail Rider', tier: 'lower', slot: 1, stepBonus: 2, winsRequired: 5, speed: 9.5, color: 0x2a6fe0 },
+  { id: 'bike_azure', name: 'Azure Cycle', tier: 'lower', slot: 2, stepBonus: 5, winsRequired: 40, speed: 10, color: 0x2a5fff },
+  { id: 'bike_cruiser_red', name: 'Red Cruiser', tier: 'lower', slot: 3, stepBonus: 25, winsRequired: 250, speed: 11, color: 0xd8323c },
+  { id: 'bike_cruiser_violet', name: 'Violet Cruiser', tier: 'lower', slot: 4, stepBonus: 50, winsRequired: 1500, speed: 12, color: 0x8b4fd0 },
+  { id: 'bike_cyan_bolt', name: 'Cyan Bolt', tier: 'lower', slot: 5, stepBonus: 100, winsRequired: 7500, speed: 13, color: 0x1fbde0 },
   // Upper level: four win bikes, then the three Blood Moon finish bikes
-  { id: 'bike_violet_racer', name: 'Violet Racer', tier: 'upper', slot: 0, stepBonus: 250, winsRequired: 10000, speed: 15, color: 0x8a4bd6 },
-  { id: 'bike_gold_sprint', name: 'Gold Sprint', tier: 'upper', slot: 1, stepBonus: 500, winsRequired: 35000, speed: 17, color: 0xffc21a },
-  { id: 'bike_blue_blitz', name: 'Blue Blitz', tier: 'upper', slot: 2, stepBonus: 1000, winsRequired: 100000, speed: 18, color: 0x2f9bff },
-  { id: 'bike_pink_phantom', name: 'Pink Phantom', tier: 'upper', slot: 3, stepBonus: 2000, winsRequired: 250000, speed: 19, color: 0xe63a8f },
+  { id: 'bike_violet_racer', name: 'Violet Racer', tier: 'upper', slot: 0, stepBonus: 250, winsRequired: 30000, speed: 15, color: 0x8a4bd6 },
+  { id: 'bike_gold_sprint', name: 'Gold Sprint', tier: 'upper', slot: 1, stepBonus: 500, winsRequired: 100000, speed: 17, color: 0xffc21a },
+  { id: 'bike_blue_blitz', name: 'Blue Blitz', tier: 'upper', slot: 2, stepBonus: 1000, winsRequired: 300000, speed: 18, color: 0x2f9bff },
+  { id: 'bike_pink_phantom', name: 'Pink Phantom', tier: 'upper', slot: 3, stepBonus: 2000, winsRequired: 750000, speed: 19, color: 0xe63a8f },
   { id: 'bike_bloodmoon_1', name: 'Blood Moon I', tier: 'upper', slot: 4, stepBonus: 150, finishesRequired: 1, speed: 14, color: 0xc0202e },
   { id: 'bike_bloodmoon_2', name: 'Blood Moon II', tier: 'upper', slot: 5, stepBonus: 450, finishesRequired: 15, speed: 16, color: 0xff4b6e },
   { id: 'bike_bloodmoon_3', name: 'Blood Moon III', tier: 'upper', slot: 6, stepBonus: 3000, finishesRequired: 150, speed: 20, color: 0xff2d3d },

@@ -55,8 +55,12 @@ button.popup-card:active { scale: .98; }
 .daily-check { position: absolute; left: 50%; top: 52%; width: calc(124 * var(--u)); height: calc(101 * var(--u)); transform: translate(-50%, -50%); }
 
 /* Wheelspin: no frame - the wheel, buy buttons and spin button float over the HUD */
-.wheel-overlay { inset: 0; }
-.wheel-backdrop { position: absolute; inset: 0; }
+/* Its buy buttons reach 645 screenshot pixels right of centre: shrink on narrow screens so they stay on screen. */
+/* The wheel's parts are placed on a 1004-tall reference screen (top-anchored wheel, bottom-anchored spin button),
+   so the overlay is that screen at this --u, centred: on a tall phone the parts stay together instead of the wheel
+   sticking to the top and the spin button to the bottom. The backdrop still covers the whole screen. */
+.wheel-overlay { --u: min(var(--hud-u), calc((100vw - 16px) / 1300)); left: 0; right: 0; top: 50%; height: calc(1004 * var(--u)); transform: translateY(-50%); }
+.wheel-backdrop { position: absolute; inset: calc(-50vh) 0; }
 .wheel-part { position: absolute; }
 .wheel-disc { transition-property: transform; transition-timing-function: cubic-bezier(.12, .62, .08, 1); will-change: transform; }
 .wheel-spin-button { left: calc(50% - 148 * var(--u)); bottom: calc(110 * var(--u)); width: calc(296 * var(--u)); height: calc(99 * var(--u)); }

@@ -15,6 +15,14 @@ const ZOOM_MIN = 0.4; // close behind the rider
 const ZOOM_MAX = 6; // high above, showing the whole map area
 const VIEW_RATE = 21; // zoom / orbit / tilt easing, per second (about the old 0.3 per frame at 60 fps)
 
+// Line of sight down into a wave-track pit: the camera rises until the view from it to the rider clears the
+// slabs' tops by SIGHT_MARGIN, so it never sits inside a black slab or looks at its wall instead of the rider.
+const SIGHT_MARGIN = 0.5;
+const SIGHT_SAMPLES = 12; // points checked along the view ray
+const SIGHT_MAX_LIFT = 14; // a rider pressed against a pit wall would ask for a near-vertical view; cap it
+const SIGHT_DROP_RATE = 3; // per second: the lift snaps up at once (never a dark frame) and eases back down
+const GROUND_SLAB_TOP = 0.2; // only ground-level slabs (the wave track's) count, not roofs or walls
+
 const ORBIT_SPEED = 0.0035; // radians per pixel dragged
 const KEY_ORBIT_STEP = 0.2; // radians per Q / E press
 const PITCH_MIN = 0.06; // never dip below the ground
@@ -52,7 +60,7 @@ export function attachCameraControls(camera) {
     data.pitch = data.pitchTarget;
   };
   // Scrolling or dragging inside HUD panels must not move the world camera.
-  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel, .menu-popup, .account-panel');
+  const overPanel = (event) => event.target instanceof Element && event.target.closest('.garage-popover, .chat-panel, .menu-popup, .account-panel, .touch-controls');
 
   const onWheel = (event) => {
     if (overPanel(event)) return;
@@ -75,13 +83,22 @@ export function attachCameraControls(camera) {
     }
   };
 
-  // Drag to rotate: right mouse button, or a single finger on the canvas.
+  // Drag to rotate: right mouse button, or a single finger on the canvas. Touches are tracked as pointers (not
+  // touch events), so a thumb the touch joystick has claimed (ui/TouchControls.jsx marks it `stickClaimed`)
+  // never counts toward a camera drag or a pinch.
   let drag = null;
-  const touchPointers = new Set();
+  const touchPointers = new Map(); // pointerId -> { x, y }, the camera's own fingers
+  let pinchDistance = 0;
+  const fingerSpread = () => {
+    const [a, b] = touchPointers.values();
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  };
   const onPointerDown = (event) => {
-    if (overPanel(event)) return;
+    if (overPanel(event) || event.stickClaimed) return;
     if (event.pointerType === 'touch') {
-      touchPointers.add(event.pointerId);
+      if (!(event.target instanceof HTMLCanvasElement)) return;
+      touchPointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (touchPointers.size === 2) pinchDistance = fingerSpread();
       if (touchPointers.size > 1) drag = null; // two fingers = pinch zoom
       else if (event.target instanceof HTMLCanvasElement) drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
     } else if (event.button === 2) {
@@ -90,6 +107,16 @@ export function attachCameraControls(camera) {
     if (drag) document.body.style.cursor = 'grabbing';
   };
   const onPointerMove = (event) => {
+    const finger = touchPointers.get(event.pointerId);
+    if (finger) {
+      finger.x = event.clientX;
+      finger.y = event.clientY;
+      if (touchPointers.size === 2 && pinchDistance) {
+        const next = fingerSpread();
+        if (next > 0) zoomBy(pinchDistance / next); // fingers apart = zoom in
+        pinchDistance = next;
+      }
+    }
     if (!drag || event.pointerId !== drag.id) return;
     // Dragging right turns the rider (and the view behind them) to the right.
     const speed = ORBIT_SPEED * data.sensitivity;
@@ -99,6 +126,7 @@ export function attachCameraControls(camera) {
   };
   const endDrag = (event) => {
     touchPointers.delete(event.pointerId);
+    if (touchPointers.size < 2) pinchDistance = 0;
     if (drag && event.pointerId === drag.id) {
       drag = null;
       document.body.style.cursor = '';
@@ -109,22 +137,6 @@ export function attachCameraControls(camera) {
     if (!overPanel(event)) event.preventDefault();
   };
 
-  let pinchDistance = 0;
-  const distance = (touches) => Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
-  const onTouchStart = (event) => {
-    if (event.touches.length === 2 && !overPanel(event)) pinchDistance = distance(event.touches);
-  };
-  const onTouchMove = (event) => {
-    if (event.touches.length !== 2 || !pinchDistance || overPanel(event)) return;
-    event.preventDefault();
-    const next = distance(event.touches);
-    zoomBy(pinchDistance / next); // fingers apart = zoom in
-    pinchDistance = next;
-  };
-  const onTouchEnd = (event) => {
-    if (event.touches.length < 2) pinchDistance = 0;
-  };
-
   const listeners = [
     ['wheel', onWheel, { passive: false }],
     ['keydown', onKey],
@@ -133,10 +145,6 @@ export function attachCameraControls(camera) {
     ['pointerup', endDrag],
     ['pointercancel', endDrag],
     ['contextmenu', onContextMenu],
-    ['touchstart', onTouchStart, { passive: true }],
-    ['touchmove', onTouchMove, { passive: false }],
-    ['touchend', onTouchEnd],
-    ['touchcancel', onTouchEnd],
   ];
   for (const [type, handler, options] of listeners) window.addEventListener(type, handler, options);
   return () => {
@@ -145,8 +153,32 @@ export function attachCameraControls(camera) {
   };
 }
 
-/** Call every frame after the target has moved; `deltaSeconds` is the frame's length. */
-export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60) {
+/**
+ * How far the camera at `eye` must rise for its view of `look` to pass above every ground-level slab that
+ * lies in between. Raising the camera by h raises the ray's point at fraction t (0 at `look`) by t * h.
+ */
+function sightLift(solids, look, eye) {
+  let lift = 0;
+  for (let i = 1; i <= SIGHT_SAMPLES; i += 1) {
+    const t = i / SIGHT_SAMPLES;
+    const x = look.x + (eye.x - look.x) * t;
+    const y = look.y + (eye.y - look.y) * t;
+    const z = look.z + (eye.z - look.z) * t;
+    for (const s of solids) {
+      if (typeof s.top !== 'number' || s.top > GROUND_SLAB_TOP) continue;
+      if (x < s.minX || x > s.maxX || z < s.minZ || z > s.maxZ || y <= s.bottom) continue;
+      const clear = s.top + SIGHT_MARGIN;
+      if (y < clear) lift = Math.max(lift, (clear - y) / t);
+    }
+  }
+  return Math.min(SIGHT_MAX_LIFT, lift);
+}
+
+/**
+ * Call every frame after the target has moved; `deltaSeconds` is the frame's length. With `collision`, the
+ * camera keeps the rider in sight down in a wave-track pit (see sightLift).
+ */
+export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60, collision = null) {
   const data = camera.userData;
   const ease = (rate) => 1 - Math.exp(-rate * deltaSeconds);
   data.zoom += (data.zoomTarget - data.zoom) * ease(VIEW_RATE);
@@ -200,5 +232,15 @@ export function updateChaseCamera(camera, target, deltaSeconds = 1 / 60) {
   }
   camera.position.set(desired.x + data.edgePush.x, desired.y, desired.z + data.edgePush.z);
   data.lookAt ??= new THREE.Vector3();
-  camera.lookAt(data.lookAt.copy(data.focus).add(LOOK_OFFSET));
+  data.lookAt.copy(data.focus).add(LOOK_OFFSET);
+  // Below the road (in a pit, or dropping into one) the slabs around can hide the rider.
+  const neededLift = collision && !data.focusPoint && target.position.y < -0.2
+    ? sightLift(collision.solids, data.lookAt, camera.position)
+    : 0;
+  data.sightLift ??= 0;
+  data.sightLift = neededLift >= data.sightLift
+    ? neededLift
+    : data.sightLift + (neededLift - data.sightLift) * ease(SIGHT_DROP_RATE);
+  camera.position.y += data.sightLift;
+  camera.lookAt(data.lookAt);
 }

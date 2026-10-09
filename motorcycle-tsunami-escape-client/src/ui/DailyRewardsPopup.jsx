@@ -58,7 +58,7 @@ export default function DailyRewardsPopup({ onClose, onMessage, onGrantSpeed, on
   };
 
   return (
-    <Popup size={[1032, 571]} top={131.5} shell={dailyShell} close={dailyClose} closeBox={[944, 11, 1012, 78]} label="Daily Rewards" onClose={onClose}
+    <Popup size={[1032, 571]} reach={680} top={131.5} shell={dailyShell} close={dailyClose} closeBox={[944, 11, 1012, 78]} label="Daily Rewards" onClose={onClose}
       after={(
         <Card art={dailyClaimAll} box={[319, 581, 713, 673]} m={0}
           onClick={press(() => { if (!claim(DAYS.filter((item) => ready(item.day)).map((item) => item.day))) onMessage(nextOpen()); })} />

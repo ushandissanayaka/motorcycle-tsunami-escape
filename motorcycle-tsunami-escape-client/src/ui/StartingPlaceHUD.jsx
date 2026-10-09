@@ -44,6 +44,7 @@ const boxStyle = ([x0, y0, x1, y1]) => {
   else if (x0 > 500) style.left = `calc(50% + ${px(x0 - 959.5)})`; // bottom bar stays centred
   else style.left = px(x0);
   if (y0 >= 800) style.bottom = px(1004 - y1);                // bottom row hugs the bottom edge
+  else if (x0 > 1200) style.top = `calc(${px(y0)} + var(--right-shift))`; // right column clears the account pill
   else style.top = px(y0);
   return style;
 };
@@ -51,8 +52,9 @@ const boxStyle = ([x0, y0, x1, y1]) => {
 const BOX = {
   shop: [18, 361, 162, 503], rebirth: [165, 361, 309, 503], trails: [18, 506, 162, 648],
   worlds: [165, 496, 328, 648], wins: [18, 651, 311, 749], price75: [82, 748, 248, 782],
-  // Daily Rewards and Wheelspin sit just under the Bloxity account pill (AccountPanel), which takes the corner.
-  daily: [1732, 70, 1832, 144], wheel: [1838, 70, 1916, 144], waves: [1425, 20, 1675, 275],
+  // The right column starts under the Bloxity account pill (AccountPanel), which takes the corner; --right-shift
+  // (StartingPlaceHUD.css) pushes it further down on small screens, where the pill keeps a minimum size.
+  daily: [1732, 70, 1832, 144], wheel: [1838, 70, 1916, 144], waves: [1430, 70, 1630, 274],
   customTitle: [1662, 222, 1897, 264], customBar: [1636, 258, 1908, 340], max: [1768, 338, 1898, 372],
   speed2x: [1636, 378, 1906, 472], price3: [1698, 470, 1846, 504],
   pets: [1636, 500, 1767, 632], inventory: [1771, 500, 1902, 632], troll: [1771, 634, 1902, 766],
@@ -124,7 +126,7 @@ function PriceTag({ box, amount }) {
 export default function StartingPlaceHUD({
   bikes, wins, finishes, notice, onWavesChange, selectedBike, onSelectBike,
   speed, level, levelProgress, customSpeed, onCustomSpeed, onGrantSpeed, onGrantWins, bikePurchaseOpen = false, aetherunePurchaseOpen = false, premiumBoardPurchase = null, onClosePurchase,
-  teleportBackOffer = false, winsPurchaseOpen = false, rewardBanner = null,
+  teleportBackOffer = false, winsPurchaseOpen = false, rewardBanner = null, levelUpBanner = null,
   account, onPurchase, serverWavesDisabled = false,
 }) {
   const [menuPopup, setMenuPopup] = useState('daily'); // greet the player with Daily Rewards on load
@@ -137,6 +139,7 @@ export default function StartingPlaceHUD({
   const [toast, setToast] = useState('');
   const toastTimer = useRef(null);
   const [banner, setBanner] = useState(null);
+  const [levelUp, setLevelUp] = useState(null);
   const [buying, setBuying] = useState(false);
 
   useEffect(() => () => clearTimeout(toastTimer.current), []);
@@ -153,6 +156,14 @@ export default function StartingPlaceHUD({
     const timer = setTimeout(() => setBanner(null), 2800);
     return () => clearTimeout(timer);
   }, [rewardBanner]);
+
+  // Big gold "You leveled up!" with the new level under it, in the middle of the screen for a moment.
+  useEffect(() => {
+    if (!levelUpBanner) return undefined;
+    setLevelUp(levelUpBanner);
+    const timer = setTimeout(() => setLevelUp(null), 2600);
+    return () => clearTimeout(timer);
+  }, [levelUpBanner]);
 
   useEffect(() => {
     if (notice) showMessage(notice.text);
@@ -344,6 +355,12 @@ export default function StartingPlaceHUD({
       <Art src={pack10mArt} box={BOX.pack10m} label="+10M speed" onClick={soon('The +10M speed pack is coming soon.')} />
 
       {toast && <div className="game-toast" role="status">{toast}</div>}
+      {levelUp && (
+        <div key={levelUp.id} className="level-up-banner" role="status">
+          <span className="level-up-title" data-text="You leveled up!">You leveled up!</span>
+          <span className="level-up-level outlined">Level {levelUp.level}</span>
+        </div>
+      )}
       {banner && <div key={banner.id} className="reward-banner" role="status" data-text={banner.text}>{banner.text}</div>}
     </div>
   );

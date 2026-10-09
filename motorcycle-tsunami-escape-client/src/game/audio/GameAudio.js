@@ -691,6 +691,14 @@ export function createGameAudio() {
   let onTrack = false;
 
   return {
+    /**
+     * Builds the audio graph (its noise and reverb buffers take ~100 ms to fill and hand to the convolver)
+     * now, behind the loading screen. The context starts suspended until the first key or click resumes it,
+     * so that first input no longer freezes the game while it is built.
+     */
+    prepare() {
+      if (!disposed && !ctx) build();
+    },
     /** Level up: a bright rising fanfare over a sparkling chord, with the song ducked under it. */
     playLevelUp() {
       if (!ready()) return;

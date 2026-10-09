@@ -26,6 +26,7 @@ import { SPEED_POPUP_VALUE } from './game/entities/SpeedPopup.js';
 import { getServerHttpUrl, joinStartingPlace } from './net/colyseusClient.js';
 import { createPlayer } from './game/entities/Player.js';
 import { createGameAudio } from './game/audio/GameAudio.js';
+import TouchControls from './ui/TouchControls.jsx';
 import StartingPlaceHUD from './ui/StartingPlaceHUD.jsx';
 
 const SAVE_KEY = 'mte-starting-place';
@@ -41,6 +42,9 @@ const freshProfile = {
   ownedBikes: [], ownedTreadmills: [], winsMultiplier: 1, transactions: [],
 };
 const PREMIUM_BOARDS = [3, 9, 25, 100]; // training boards that are locked until bought
+// Speed per second on a training board = the equipped bike's own speed x the board's multiplier x this. It uses the
+// bike's speed, not the Custom Speed setting (up to 116), so turning that up can't make levels fly by.
+const TRAINING_RATE = 0.6;
 // Graphics quality (the portal's graphics_quality setting): the highest pixel ratio to draw at, and whether
 // the glow pass runs. Neither needs a shader rebuilt, so switching never stalls a frame.
 const QUALITY = {
@@ -90,6 +94,7 @@ function readProfile() {
 export default function App() {
   const canvasRef = useRef(null);
   const bikeRef = useRef(null);
+  const keysRef = useRef(null); // the game loop's input state, which the touch controls also drive
   const cameraRef = useRef(null);
   const [profile, setProfile] = useState(readProfile);
   const profileRef = useRef(profile);
@@ -104,6 +109,7 @@ export default function App() {
   const [teleportBackOffer, setTeleportBackOffer] = useState(false);
   const [winsPurchaseOpen, setWinsPurchaseOpen] = useState(false);
   const [rewardBanner, setRewardBanner] = useState(null); // { id, text }: "You received N Wins!"
+  const [levelUpBanner, setLevelUpBanner] = useState(null); // { id, level }: "You leveled up! Level N"
   const [serverWavesDisabled, setServerWavesDisabled] = useState(false);
   const worldRef = useRef(null);
   const padHandlerRef = useRef(() => {});
@@ -138,6 +144,10 @@ export default function App() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
+    // Checking a shader for errors asks the driver for its info log the first time it is drawn, which waits for
+    // the GPU to finish building it: a freeze the first time something new comes into view. Keep the check
+    // while developing only.
+    renderer.debug.checkShaderErrors = import.meta.env.DEV;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     // Glow: only things brighter than white (neon strips, pads, hubs, water highlights) bloom.
@@ -146,6 +156,15 @@ export default function App() {
     composer.setSize(window.innerWidth, window.innerHeight);
     composer.addPass(new RenderPass(scene, camera));
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.42, 0.7, 1.0);
+    // A single NaN / infinite pixel (a degenerate normal, a divide by zero in some shader) would be smeared by
+    // the bloom blur into a black square for that frame, which reads as a black box flashing open. The bloom's
+    // bright-pass drops any such pixel first, so it can never spread.
+    bloomPass.materialHighPassFilter.fragmentShader = bloomPass.materialHighPassFilter.fragmentShader.replace(
+      'vec4 texel = texture2D( tDiffuse, vUv );',
+      `vec4 texel = texture2D( tDiffuse, vUv );
+      if ( !( all( greaterThanEqual( texel, vec4( 0.0 ) ) ) && all( lessThan( texel, vec4( 60000.0 ) ) ) ) ) texel = vec4( 0.0 );`,
+    );
+    bloomPass.materialHighPassFilter.needsUpdate = true;
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
     // Bloom is a soft blur, so it doesn't need full resolution to look right; composer.setSize above (and
@@ -162,6 +181,7 @@ export default function App() {
       composer.setSize(window.innerWidth, window.innerHeight);
       sizeBloom();
       bloomPass.enabled = quality.bloom;
+      composer.render(); // resizing clears the canvas: draw again now, not a frame later, so it never flashes empty
     };
 
     const world = buildStartingPlace(scene, renderer);
@@ -170,6 +190,7 @@ export default function App() {
     const detachLeaderboards = world.leaderboards.attach(camera, renderer.domElement);
     worldRef.current = world;
     const keys = createInputState();
+    keysRef.current = keys;
     const remoteRiders = new Map();
     let room = null;
     let cancelled = false;
@@ -487,7 +508,8 @@ export default function App() {
         ? overlappingPad
         : null;
       const trainingMultiplier = trainingPad?.multiplier ?? 0;
-      const trainingRate = (world.player.userData.moveSpeed || 9) * trainingMultiplier;
+      const bikeSpeed = BIKES.find((bike) => bike.id === profileRef.current.selectedBike)?.speed ?? BIKES[0].speed;
+      const trainingRate = bikeSpeed * trainingMultiplier * TRAINING_RATE;
       speedGainRemainder += lockedPremiumBoard ? 0 : trainingPad ? trainingRate * delta : movedDistance;
       speedGainRemainder += bonusSpeedRef.current; // wheelspin / daily reward prizes
       bonusSpeedRef.current = 0;
@@ -558,7 +580,7 @@ export default function App() {
         if (levelsGained > 0) {
           syncHud(now);
           audio.playLevelUp();
-          setNotice({ id: Date.now(), text: `Level up! You reached Level ${riderLevel}. Your jump is higher and your bike is faster.` });
+          setLevelUpBanner({ id: now, level: riderLevel });
         }
       }
       if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
@@ -584,7 +606,7 @@ export default function App() {
         const ground = world.collision.supportAt(rider.position.x, rider.position.z, rider.position.y);
         updateRidePitch(rider, world.collision, delta, Math.abs(rider.position.y - ground) < 0.15);
       }
-      updateChaseCamera(camera, world.player, delta);
+      updateChaseCamera(camera, world.player, delta, world.collision);
       world.update(now / 1000, (bike) => padHandlerRef.current(bike), camera, () => {
         camera.userData.focusPoint = new THREE.Vector3(-8.5, 4, -32.3);
         camera.userData.zoomTarget = 0.4;
@@ -632,6 +654,7 @@ export default function App() {
       renderer.setSize(window.innerWidth, window.innerHeight);
       composer.setSize(window.innerWidth, window.innerHeight);
       sizeBloom();
+      composer.render(); // resizing clears the canvas: draw again now, not a frame later, so it never flashes empty
     };
     window.addEventListener('resize', resize);
 
@@ -645,6 +668,7 @@ export default function App() {
       if (!active) return;
       // With the models in, build every shader behind the loading screen, so none is built mid-ride.
       world.warmShaders(renderer, camera, composer.readBuffer, () => composer.render());
+      audio.prepare();
       loadingEnd();
       gameplayStart();
       hideLoadingScreen();
@@ -810,6 +834,7 @@ export default function App() {
       >
         {muted ? '🔇' : '🔊'}
       </button>
+      <TouchControls keysRef={keysRef} canvasRef={canvasRef} />
       <StartingPlaceHUD
         bikes={BIKES}
         wins={profile.wins}
@@ -824,6 +849,7 @@ export default function App() {
         serverWavesDisabled={serverWavesDisabled}
         winsPurchaseOpen={winsPurchaseOpen}
         rewardBanner={rewardBanner}
+        levelUpBanner={levelUpBanner}
         onClosePurchase={() => {
           setBikePurchaseOpen(false);
           setAetherunePurchaseOpen(false);

@@ -34,7 +34,7 @@ permissions:
 
 env:
   GAME_ID: speed-motorcycle-tsunami-escape
-  GAME_SLUG: motorcycle-tsunami-escape
+  GAME_SLUG: speed-motorcycle-tsunami-escape  # the SDK's gameSlug; same as the hosting game id
   IMAGE_OWNER: ushandissanayaka
   IMAGE_NAME: motorcycle-tsunami-escape-server
   SERVER_DIR: ./motorcycle-tsunami-escape-server

@@ -18,10 +18,8 @@
 # motorcycle-tsunami-escape-server -> Package settings -> Change visibility -> Public),
 # otherwise Legion cannot pull the image.
 #
-# The frontend is a static Vite build. When the Bloxity upload endpoint and token
-# are configured in repo secrets, this workflow uploads the generated bundle to the
-# matching dev/prod game channel. Without them it warns and continues so the
-# backend deploy still works.
+# The frontend is a static Vite build, zipped and uploaded to the hosting API
+# with the same LEGION_DEPLOY_TOKEN, to the matching dev/prod channel.
 
 name: Deploy to Bloxity
 
@@ -177,53 +175,42 @@ jobs:
           cache: npm
           cache-dependency-path: ${{ env.CLIENT_DIR }}/package-lock.json
 
+      # On *.play.bloxity.io the client works out the backend host (and Legion's matchmaker) by itself.
       - name: Build the client bundle
         working-directory: ${{ env.CLIENT_DIR }}
         env:
           VITE_GAME_SLUG: ${{ env.GAME_SLUG }}
-          VITE_SERVER_WS_URL: wss://server.${{ env.GAME_ID }}.dev.play.bloxity.io
         run: |
           npm ci
           npm run build
 
-      - name: Upload the client bundle to Bloxity
+      - name: Zip the build
+        working-directory: ${{ env.CLIENT_DIR }}/dist
+        run: zip -qr "${GITHUB_WORKSPACE}/build.zip" .
+
+      - name: Upload the client to Bloxity
         env:
-          BLOXITY_CLIENT_UPLOAD_URL: ${{ secrets.BLOXITY_CLIENT_UPLOAD_URL }}
-          BLOXITY_CLIENT_UPLOAD_TOKEN: ${{ secrets.BLOXITY_CLIENT_UPLOAD_TOKEN }}
+          LEGION_TOKEN: ${{ secrets.LEGION_DEPLOY_TOKEN }}
           CHANNEL: ${{ steps.ch.outputs.channel }}
           VERSION: ${{ steps.ch.outputs.sha }}
         run: |
           set -uo pipefail
-          if [ -z "${BLOXITY_CLIENT_UPLOAD_URL:-}" ] || [ -z "${BLOXITY_CLIENT_UPLOAD_TOKEN:-}" ]; then
-            echo "::warning::Bloxity client upload secrets are not configured; skipping static client upload."
-            echo "Add BLOXITY_CLIENT_UPLOAD_URL and BLOXITY_CLIENT_UPLOAD_TOKEN to the repo secrets to deploy the web bundle."
-            exit 0
-          fi
-
-          archive="${RUNNER_TEMP}/motorcycle-tsunami-escape-client-${CHANNEL}.zip"
-          (cd "${CLIENT_DIR}" && zip -qr "$archive" dist)
-
-          echo "Uploading client bundle for ${GAME_ID} ${CHANNEL} (${VERSION})"
+          url="https://api.bloxity.io/v1/hosting/games/${GAME_ID}/frontend?channel=${CHANNEL}&version=${VERSION}"
+          echo "POST $url"
+          ls -la build.zip
           body="$(mktemp)"
-          code="$(curl -sS -o "$body" -w '%{http_code}' -X POST "${BLOXITY_CLIENT_UPLOAD_URL}" \
-            --connect-timeout 15 --max-time 180 \
-            -H "Authorization: Bearer ${BLOXITY_CLIENT_UPLOAD_TOKEN}" \
-            -H 'Content-Type: multipart/form-data' \
-            -F "game=${GAME_ID}" \
-            -F "channel=${CHANNEL}" \
-            -F "version=${VERSION}" \
-            -F "file=@${archive}")" || {
-            echo "::error::curl could not reach the Bloxity static upload endpoint."
+          code="$(curl -sS -o "$body" -w '%{http_code}' -X POST "$url"             --connect-timeout 15 --max-time 300             -H "Authorization: Bearer ${LEGION_TOKEN}"             -H "Content-Type: application/zip"             --data-binary @build.zip)" || {
+            echo "::error::curl could not reach the hosting API at all (network/DNS)."
             exit 1
           }
-
           echo "HTTP $code"
           echo "--- response ---"; cat "$body"; echo; echo "----------------"
           case "$code" in
-            2*) echo "Client bundle uploaded." ;;
-            *)
-              echo "::error::Bloxity client upload failed with HTTP $code."
-              exit 1 ;;
+            2*) echo "Client uploaded." ;;
+            401|403) echo "::error::Hosting rejected the token (HTTP $code)."; exit 1 ;;
+            404) echo "::error::No hosted game called '${GAME_ID}' (HTTP 404). Create it on hosting.bloxity.io first."; exit 1 ;;
+            413) echo "::error::build.zip is too large for the hosting API (HTTP 413)."; exit 1 ;;
+            *) echo "::error::Client upload failed with HTTP $code - see the response above."; exit 1 ;;
           esac
 
       - name: Where it went

@@ -782,7 +782,7 @@ export default function App() {
   };
   // Buys `sku` with Bux (Bloxity shows its own confirmation); resolves to the SDK's { success, error? }.
   const buyWithBux = async (sku) => {
-    const result = await purchase(sku, { game: 'motorcycle-tsunami-escape' });
+    const result = await purchase(sku, { game: 'speed-motorcycle-tsunami-escape' });
     if (result.success) {
       grantPurchase(sku, result.transactionId);
       account.refreshBalance();

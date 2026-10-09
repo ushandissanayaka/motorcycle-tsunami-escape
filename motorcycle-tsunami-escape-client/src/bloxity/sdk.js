@@ -2,7 +2,7 @@
 // touching the global directly, and gives you one place to add logging /
 // mocking for local dev without the script tag loaded.
 
-const GAME_SLUG = import.meta.env.VITE_GAME_SLUG || 'motorcycle-tsunami-escape';
+const GAME_SLUG = import.meta.env.VITE_GAME_SLUG || 'speed-motorcycle-tsunami-escape';
 // Named outright: left out, the SDK assumes on localhost that the Bloxity portal itself runs locally (as for
 // portal developers) and sends logins and API calls there, so logging in while testing this game locally
 // would fail. These are the SDK's own defaults everywhere else.

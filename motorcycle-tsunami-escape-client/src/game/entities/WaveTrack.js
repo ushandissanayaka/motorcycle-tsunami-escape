@@ -315,6 +315,13 @@ export function createWaveTrack({ x0, x1, zStart, pitDepth, ...track }) {
     }
     return starts[i];
   };
+  /** How many slabs a rider at `z` has fully passed: 0 before the track, i on slab i, i + 1 in the pit after it. */
+  const slabsPassed = (z) => {
+    if (z > zStart) return 0;
+    let i = 0;
+    while (segmentStart(i + 1) > z) i += 1;
+    return z < segmentStart(i) - waveSlabLength(i, track) ? i + 1 : i;
+  };
   const built = new Map(); // segment index -> { meshGroup, solid, pit, surfaces, rewards }
   const claimedRewards = new Set(); // reward ids collected and not yet restored, kept across rebuilds
 
@@ -559,7 +566,7 @@ export function createWaveTrack({ x0, x1, zStart, pitDepth, ...track }) {
 
   return {
     group, solids, pits, surfaces, rewards, rewardAt, lockedRewardAt, collectReward, restoreReward, setRiderLevel,
-    setWarning, update,
+    setWarning, update, slabsPassed,
     get zEnd() { return frontierZ; },
   };
 }

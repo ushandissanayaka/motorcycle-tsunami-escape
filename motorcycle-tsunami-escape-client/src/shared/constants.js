@@ -7,6 +7,31 @@ export function levelTarget(level) {
   return LEVEL_BASE + (level - 1) * LEVEL_STEP;
 }
 
+/** Total speed collected from level 1 up to the start of `level`. */
+export function speedToReachLevel(level) {
+  const n = Math.max(0, level - 1);
+  return n * LEVEL_BASE + (LEVEL_STEP * n * (n - 1)) / 2;
+}
+
+// The "N Speed" readout shows collected speed scaled down so it reads about 1,000 on reaching level 10 (the raw
+// total is ~28,000 by then, since every level asks more than the last). Only the number shown changes:
+// levelling, rewards and the server all keep the raw total.
+const SPEED_DISPLAY_SCALE = 1000 / speedToReachLevel(10);
+export const displaySpeed = (speed) => Math.floor(Math.max(0, speed) * SPEED_DISPLAY_SCALE);
+
+// The Custom Speed box's ceiling: 116 for levels 1-10, then 10 more for every 10 levels (126 for 11-20, ...).
+const CUSTOM_SPEED_BASE_MAX = 116;
+export const customSpeedMax = (level) => CUSTOM_SPEED_BASE_MAX + 10 * Math.floor((Math.max(1, level) - 1) / 10);
+
+// Custom Speed numbers map to the speed the bike really rides at (units per second): one for one up to
+// CUSTOM_SPEED_KNEE, then CUSTOM_SPEED_SLOPE per point, so the big numbers (116, 160, ...) feel fast without
+// launching the bike across the map (116 rides at ~58, 160 at ~76).
+const CUSTOM_SPEED_KNEE = 20;
+const CUSTOM_SPEED_SLOPE = 0.4;
+export const rideSpeedFor = (value) => (value <= CUSTOM_SPEED_KNEE ? value : CUSTOM_SPEED_KNEE + (value - CUSTOM_SPEED_KNEE) * CUSTOM_SPEED_SLOPE);
+/** The Custom Speed number for a ride speed (the inverse of rideSpeedFor), as the box shows a player's own speed. */
+export const customSpeedFor = (rideSpeed) => (rideSpeed <= CUSTOM_SPEED_KNEE ? rideSpeed : CUSTOM_SPEED_KNEE + (rideSpeed - CUSTOM_SPEED_KNEE) / CUSTOM_SPEED_SLOPE);
+
 /**
  * How many levels `levelProgress + earnedSpeed` clears from `riderLevel`, and what's left over in the
  * new level's own (bigger) bar. Levels needed for a jump of `n` grow with n², so a single very large

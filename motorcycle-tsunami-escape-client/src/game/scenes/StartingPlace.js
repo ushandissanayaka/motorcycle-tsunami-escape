@@ -222,7 +222,7 @@ export function buildStartingPlace(scene, renderer) {
     chestArea.update(time, camera);
     gate.update(time);
     world2Bike.update(time);
-    tsunami.update(time, player.position.z);
+    tsunami.update(time, player.position.z, waveTrack.slabsPassed(player.position.z)); // more waves further out
     if (camera) clouds.update(camera);
     lights.followRider(player.position);
     speedPopups.update(time);

@@ -4,7 +4,7 @@ import AccountPanel from './AccountPanel.jsx';
 import BuxIcon from './BuxIcon.jsx';
 import bloxityHead from '../assets/bloxity_head.svg';
 import { BUX_SKUS, treadmillSku } from '../bloxity/skus.js';
-import { formatShort, levelTarget } from '../shared/constants.js';
+import { customSpeedMax, displaySpeed, formatShort, levelTarget } from '../shared/constants.js';
 import './StartingPlaceHUD.css';
 
 import trophyArt from '../assets/hud/trophy.png';
@@ -18,7 +18,6 @@ import wheelArt from '../assets/hud/wheel.png';
 import wavesArt from '../assets/hud/waves.png';
 import customTitleArt from '../assets/hud/custom_title.png';
 import customBarArt from '../assets/hud/custom_bar.png';
-import maxArt from '../assets/hud/max.png';
 import speed2xArt from '../assets/hud/speed2x.png';
 import petsArt from '../assets/hud/pets.png';
 import inventoryArt from '../assets/hud/inventory.png';
@@ -30,8 +29,6 @@ import pack100kArt from '../assets/hud/pack100k.png';
 import pack1mArt from '../assets/hud/pack1m.png';
 import pack10mArt from '../assets/hud/pack10m.png';
 import teleportBackArt from '../assets/hud/teleport_back.png';
-
-export const CUSTOM_SPEED_MAX = 116;
 
 /*
  * The HUD art was cut out of the reference screenshot (1919x1004). Every piece is placed at its
@@ -240,7 +237,11 @@ export default function StartingPlaceHUD({
   };
   const commitSpeed = () => {
     const value = parseFloat(speedDraft);
-    if (Number.isFinite(value)) onCustomSpeed(Math.min(CUSTOM_SPEED_MAX, Math.max(1, value)));
+    if (Number.isFinite(value)) {
+      const max = customSpeedMax(level);
+      onCustomSpeed(Math.min(max, Math.max(1, value)));
+      if (value > max) showMessage(`Max Custom Speed is ${max} at Level ${level}. It rises by 10 every 10 levels.`);
+    }
     setEditingSpeed(false);
   };
   const onSpeedKey = (event) => {
@@ -328,13 +329,13 @@ export default function StartingPlaceHUD({
         <img src={customBarArt} alt="" draggable={false} />
         {editingSpeed ? (
           <input
-            className="speed-input outlined" type="number" min="1" max={CUSTOM_SPEED_MAX} step="1" autoFocus
+            className="speed-input outlined" type="number" inputMode="numeric" min="1" max={customSpeedMax(level)} step="1" autoFocus
             value={speedDraft} onChange={(event) => setSpeedDraft(event.target.value)}
             onBlur={commitSpeed} onKeyDown={onSpeedKey} onFocus={(event) => event.target.select()}
           />
         ) : <span className="speed-value outlined">{formatSpeed(customSpeed)}</span>}
       </div>
-      <StaticArt src={maxArt} box={BOX.max} />
+      <span className="hud-static custom-max outlined" style={boxStyle(BOX.max)}>MAX: {customSpeedMax(level)}</span>
 
       <Art src={speed2xArt} box={BOX.speed2x} label="2x Speed" onClick={press(() => setShopPurchase({ name: '2x Speed', price: 3, icon: '⚡', sku: BUX_SKUS.BOOST_2X_SPEED }))} />
       <PriceTag box={BOX.price3} amount={3} />
@@ -343,7 +344,7 @@ export default function StartingPlaceHUD({
       <Art src={trollArt} box={BOX.troll} label="Troll" onClick={soon('Troll tools are coming soon.')} />
 
       {/* Bottom: speed, level, speed packs */}
-      <div className="speed-readout outlined">{speed.toLocaleString()} Speed</div>
+      <div className="speed-readout outlined">{displaySpeed(speed).toLocaleString()} Speed</div>
       <div className="level-bar" style={boxStyle(BOX.levelBar)}>
         <img className="level-empty" src={levelBarEmptyArt} alt="" draggable={false} />
         <img className="level-full" src={levelBarArt} alt="" draggable={false} style={{ clipPath: `inset(0 ${100 - barFill}% 0 0)` }} />

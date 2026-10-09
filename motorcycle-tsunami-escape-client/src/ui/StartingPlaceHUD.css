@@ -61,6 +61,8 @@
 
 /* Bottom: speed number and level bar (the bar art has no text; the numbers are live) */
 .speed-readout { position: absolute; bottom: calc(188 * var(--u)); left: 50%; transform: translateX(-50%); font-size: calc(42 * var(--u)); line-height: calc(46 * var(--u)); --sw: 9; }
+/* "MAX: 116" under the custom speed bar: live, since the ceiling rises with level (customSpeedMax). */
+.custom-max { display: flex; align-items: center; justify-content: center; font-size: calc(30 * var(--u)); --sw: 7; }
 .level-bar { position: absolute; }
 .level-bar img { position: absolute; inset: 0; width: 100%; height: 100%; user-select: none; pointer-events: none; }
 .level-count { position: absolute; top: 50%; transform: translateY(-50%); font-size: calc(46 * var(--u)); --sw: 9; }

@@ -278,11 +278,35 @@ const setDisplayColor = (color, hex) => color.set(hex).convertLinearToSRGB();
 
 const randomBetween = (min, max) => min + Math.random() * (max - min);
 
-/** Picks a kind at random, by weight. */
-function pickType() {
-  let roll = Math.random() * Object.values(WAVE_TYPES).reduce((sum, type) => sum + type.weight, 0);
+// Far out on the track the waves come thicker and faster, so getting further is a real challenge. `pressure`
+// (0..1, see pressureFor) scales: how much each kind's weight shifts (slow ones rarer, fast ones commoner)...
+const PRESSURE_BIAS = { verySlow: -0.6, slow: -0.3, medium: 0.3, fast: 0.6 };
+// ...the quiet spell between bursts (down from the normal waitRange to this at full pressure)...
+const PRESSURE_WAIT = [2.5, 5];
+// ...and how many waves a burst brings: the chance of a lone wave / of at most two, at no and at full pressure.
+const BURST_ODDS = { calm: [0.6, 0.87], full: [0.2, 0.67] };
+// Pressure starts at PRESSURE_START once the rider has passed PRESSURE_FROM slabs and reaches 1 at PRESSURE_FULL.
+const PRESSURE_FROM = 10;
+const PRESSURE_FULL = 25;
+const PRESSURE_START = 0.35;
+// Past PRESSURE_FROM, a wave this far behind the rider (on its way back to the start) is dropped: it can no longer
+// reach them, and it frees its slot for the next one.
+const DROP_BEHIND = 260;
+
+/** Wave pressure for a rider who has passed `slabs` slabs: 0 before PRESSURE_FROM, then PRESSURE_START..1. */
+export function pressureFor(slabs) {
+  if (slabs < PRESSURE_FROM) return 0;
+  return PRESSURE_START + (1 - PRESSURE_START) * Math.min(1, (slabs - PRESSURE_FROM) / (PRESSURE_FULL - PRESSURE_FROM));
+}
+
+const lerp = (a, b, t) => a + (b - a) * t;
+
+/** Picks a kind at random, by weight (shifted toward the fast kinds under `pressure`). */
+function pickType(pressure = 0) {
+  const weight = (id, type) => type.weight * (1 + pressure * PRESSURE_BIAS[id]);
+  let roll = Math.random() * Object.entries(WAVE_TYPES).reduce((sum, [id, type]) => sum + weight(id, type), 0);
   for (const [id, type] of Object.entries(WAVE_TYPES)) {
-    roll -= type.weight;
+    roll -= weight(id, type);
     if (roll <= 0) return id;
   }
   return 'slow';
@@ -294,14 +318,16 @@ function pickType() {
  * partway down the corridor and overtakes it: `delay` is worked out from the two speeds so the catch-up happens
  * `OVERTAKE_AT` units from where they started, which is where a rider on the track can see them pass one another.
  */
-function planBurst() {
+function planBurst(pressure = 0) {
   const roll = Math.random();
-  const count = roll < 0.6 ? 1 : roll < 0.87 ? 2 : 3;
+  const lone = lerp(BURST_ODDS.calm[0], BURST_ODDS.full[0], pressure);
+  const pair = lerp(BURST_ODDS.calm[1], BURST_ODDS.full[1], pressure);
+  const count = roll < lone ? 1 : roll < pair ? 2 : 3;
   const spawns = [];
   let delay = 0;
   let previous = null;
   for (let i = 0; i < count; i += 1) {
-    const id = pickType();
+    const id = pickType(pressure);
     if (previous) {
       const slow = previous.speed;
       const fast = WAVE_TYPES[id].speed;
@@ -409,8 +435,12 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
     state.waves = state.waves.filter((item) => item !== wave);
   };
 
-  /** Per-frame: `riderZ` places new waves ahead of the rider and fades the name tags with distance. */
-  const update = (time, riderZ = 0) => {
+  /**
+   * Per-frame: `riderZ` places new waves ahead of the rider and fades the name tags with distance; `slabsPassed`
+   * (how far along the wave track the rider is) sets the wave pressure (see pressureFor).
+   */
+  const update = (time, riderZ = 0, slabsPassed = 0) => {
+    const pressure = pressureFor(slabsPassed);
     const dt = scheduler.lastTime === null ? 0 : THREE.MathUtils.clamp(time - scheduler.lastTime, 0, 0.1);
     scheduler.lastTime = time;
 
@@ -420,13 +450,17 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
     scheduler.queue.forEach((spawn) => { spawn.delay -= dt; });
     while (scheduler.queue.length && scheduler.queue[0].delay <= 0) spawnWave(scheduler.queue.shift().id, riderZ);
     scheduler.timer -= dt;
+    // Under pressure a calm spell is never longer than the pressure wait, so a rider who has just ridden out past
+    // PRESSURE_FROM doesn't sit out a long one planned back at the start.
+    if (pressure > 0 && !scheduler.queue.length) scheduler.timer = Math.min(scheduler.timer, PRESSURE_WAIT[1]);
     if (scheduler.timer <= 0 && !scheduler.queue.length) {
-      if (state.waves.length + 3 > MAX_WAVES) {
-        scheduler.timer = 2; // too many in the water for another burst; look again shortly
+      const burst = planBurst(pressure);
+      if (state.waves.length + burst.spawns.length > MAX_WAVES) {
+        scheduler.timer = 1; // too many in the water for this burst; look again shortly
       } else {
-        const burst = planBurst();
         scheduler.queue.push(...burst.spawns);
-        scheduler.timer = burst.span + randomBetween(...waitRange);
+        const wait = [lerp(waitRange[0], PRESSURE_WAIT[0], pressure), lerp(waitRange[1], PRESSURE_WAIT[1], pressure)];
+        scheduler.timer = burst.span + randomBetween(...wait);
       }
     }
 
@@ -440,7 +474,7 @@ export function createTsunami({ width = 46, zFar, zNear, waitRange = [7, 16], st
       wave.uniforms.uCurl.value = 1;
       // The moment the wave's foot reaches zNear it simply vanishes at its full height: it does not sink or
       // crash first.
-      if (wave.z >= zNear) {
+      if (wave.z >= zNear || (pressure > 0 && wave.z - riderZ > DROP_BEHIND)) {
         retire(wave);
         continue;
       }

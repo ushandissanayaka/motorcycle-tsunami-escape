@@ -20,7 +20,7 @@ import { attachCameraControls, createChaseCamera, updateChaseCamera } from './ga
 import { createInputState, updateMovement, updateRidePitch } from './game/systems/movement.js';
 import { RIDER_HEIGHT } from './game/systems/collision.js';
 import { checkBoostPadOverlap } from './game/entities/BoostPad.js';
-import { BIKES, MAP_LAYOUT, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort } from './shared/constants.js';
+import { BIKES, MAP_LAYOUT, isBikeUnlocked, requirementText, rideColor, levelTarget, applyLevelProgress, formatShort, customSpeedMax, rideSpeedFor, customSpeedFor } from './shared/constants.js';
 import { HIDDEN_COUNT_OVER } from './game/entities/WaveTrack.js';
 import { SPEED_POPUP_VALUE } from './game/entities/SpeedPopup.js';
 import { getServerHttpUrl, joinStartingPlace } from './net/colyseusClient.js';
@@ -101,7 +101,10 @@ export default function App() {
   const bonusSpeedRef = useRef(0);
   profileRef.current = profile;
   const [presence, setPresence] = useState({ status: 'connecting', count: 1 });
-  const [customSpeed, setCustomSpeed] = useState(BIKES[0].speed);
+  // The number the player typed into the Custom Speed box (ridden at rideSpeedFor of it); null rides at their own speed (the
+  // equipped bike's plus their level and speed bonuses, see effectiveBikeSpeed). Not saved: a refresh, a change
+  // of bike, or a respawn after a wave catches them goes back to their own speed.
+  const [customSpeed, setCustomSpeed] = useState(null);
   const [notice, setNotice] = useState(null);
   const [bikePurchaseOpen, setBikePurchaseOpen] = useState(false);
   const [aetherunePurchaseOpen, setAetherunePurchaseOpen] = useState(false);
@@ -459,6 +462,7 @@ export default function App() {
         endWipeout();
         sendHome();
         clearKeys();
+        setCustomSpeed(null); // a respawn rides at the player's own speed again
       }
       if (teleportBackRequested) {
         teleportBackRequested = false;
@@ -485,6 +489,7 @@ export default function App() {
         world.player.visible = true;
         audio.playRespawn();
         setTeleportBackOffer(false); // the Teleport Back offer is only for while the wreck lies there
+        setCustomSpeed(null); // respawned: a typed Custom Speed is dropped, back to the player's own speed
         setNotice({ id: Date.now(), text: 'The tsunami caught you! Returned to the starting point.' });
       }
       const previousX = world.player.position.x;
@@ -574,6 +579,7 @@ export default function App() {
         // bigger bar. Solved in closed form (see applyLevelProgress) rather than one level at a time,
         // since a huge enough grant could otherwise ask for millions of loop iterations in a single frame.
         const { levelsGained, levelProgress: newLevelProgress } = applyLevelProgress(levelProgress, earnedSpeed, riderLevel);
+        const previousMax = customSpeedMax(riderLevel);
         riderLevel += levelsGained;
         levelProgress = newLevelProgress;
         hudDirty = true;
@@ -581,6 +587,9 @@ export default function App() {
           syncHud(now);
           audio.playLevelUp();
           setLevelUpBanner({ id: now, level: riderLevel });
+          if (customSpeedMax(riderLevel) > previousMax) {
+            setNotice({ id: Date.now(), text: `Max Custom Speed is now ${customSpeedMax(riderLevel)}!` });
+          }
         }
       }
       if (hudDirty && now - lastHudSync >= HUD_SYNC_MS) syncHud(now);
@@ -725,9 +734,8 @@ export default function App() {
     if (bikeRef.current && bike) {
       bikeRef.current.userData.setBikeModel?.(bike.id);
       bikeRef.current.userData.setBikeColor?.(rideColor(bike));
-      bikeRef.current.userData.moveSpeed = bike.speed;
     }
-    if (bike) setCustomSpeed(bike.speed);
+    setCustomSpeed(null); // a new bike rides at its own speed until the player types another
     // Measure the new bike for a wave's wipeout ahead of time, in idle time (see Shatter.prepare): once now,
     // and again after a textured model loading in the background has had time to arrive.
     const prepare = () => {
@@ -737,13 +745,17 @@ export default function App() {
     return () => timers.forEach(clearTimeout);
   }, [profile.selectedBike]);
 
+  // The player's own ride speed: every level and collected speed add a little to the bike's (both capped, so
+  // long-term progression stays playable). The Custom Speed box shows it until they type their own.
+  const ownSpeed = effectiveBikeSpeed(
+    (BIKES.find((item) => item.id === profile.selectedBike) ?? BIKES[0]).speed, profile.speed, profile.level,
+  );
+  const rideSpeed = customSpeed === null ? ownSpeed : rideSpeedFor(customSpeed);
   useEffect(() => {
     if (!bikeRef.current) return;
-    // Every level adds a little drive speed and raises the jump arc. Cap both
-    // bonuses so long-term progression stays playable.
-    bikeRef.current.userData.moveSpeed = effectiveBikeSpeed(customSpeed, profile.speed, profile.level);
-    bikeRef.current.userData.jumpSpeed = Math.min(12, 6 + (profile.level - 1) * 0.2);
-  }, [customSpeed, profile.speed, profile.level]);
+    bikeRef.current.userData.moveSpeed = rideSpeed;
+    bikeRef.current.userData.jumpSpeed = Math.min(12, 6 + (profile.level - 1) * 0.2); // each level jumps a bit higher
+  }, [rideSpeed, profile.level]);
 
   const selectBike = (bike) => {
     if (!isBikeUnlocked(bike, profile)) return;
@@ -816,9 +828,7 @@ export default function App() {
 
   const changeCustomSpeed = (value) => {
     setCustomSpeed(value);
-    if (bikeRef.current) {
-      bikeRef.current.userData.moveSpeed = effectiveBikeSpeed(value, profileRef.current.speed, profileRef.current.level);
-    }
+    if (bikeRef.current) bikeRef.current.userData.moveSpeed = rideSpeedFor(value); // from this frame on
   };
 
   return (
@@ -866,7 +876,7 @@ export default function App() {
         speed={profile.speed}
         level={profile.level}
         levelProgress={profile.levelProgress}
-        customSpeed={customSpeed}
+        customSpeed={customSpeed ?? Math.round(customSpeedFor(ownSpeed))}
         onCustomSpeed={changeCustomSpeed}
         onGrantSpeed={(amount) => { bonusSpeedRef.current += amount; }}
         onGrantWins={(amount) => setProfile((current) => ({ ...current, wins: current.wins + amount }))}

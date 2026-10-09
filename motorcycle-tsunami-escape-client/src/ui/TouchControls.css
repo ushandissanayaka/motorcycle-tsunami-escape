@@ -1,0 +1,39 @@
+/* Touch controls (TouchControls.jsx). Only the Jump button takes touches itself; the joystick is drawn where the
+   thumb went down on the game canvas, which receives the touch. */
+.touch-controls { position: absolute; inset: 0; z-index: 5; pointer-events: none; user-select: none; -webkit-user-select: none; }
+
+.touch-stick {
+  --reach: 56px;
+  position: absolute; width: calc(var(--reach) * 2); height: calc(var(--reach) * 2); transform: translate(-50%, -50%);
+  border: 2px solid rgb(255 255 255 / 55%); border-radius: 50%; background: rgb(10 20 35 / 28%);
+  box-shadow: 0 3px 12px rgb(0 0 0 / 25%);
+}
+.touch-stick-knob {
+  position: absolute; left: 50%; top: 50%; width: calc(var(--reach) * 0.9); height: calc(var(--reach) * 0.9);
+  transform: translate(-50%, -50%); border: 2px solid rgb(255 255 255 / 85%); border-radius: 50%;
+  background: rgb(255 255 255 / 45%); box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+}
+/* Where the stick waits while no thumb is on it: a faint hint in the lower left, clear of the HUD columns. */
+.touch-stick-hint { --reach: clamp(40px, 11vmin, 60px); left: 22%; top: 70%; opacity: .55; }
+.touch-stick-hint span {
+  position: absolute; left: 50%; top: calc(100% + 6px); transform: translateX(-50%); white-space: nowrap;
+  color: #fff; font: 700 13px/1 'Fredoka', 'Arial Black', Arial, sans-serif;
+  -webkit-text-stroke: 3px #0c0c0c; paint-order: stroke fill;
+}
+
+/* Jump: bottom right beside the sound button, clear of the speed packs on landscape screens. */
+.touch-jump {
+  position: absolute; right: 66px; bottom: 12px; width: 66px; height: 66px; display: grid; place-items: center;
+  align-content: center; gap: 1px; padding: 0; border: 3px solid #fff; border-radius: 50%;
+  background: radial-gradient(circle at 50% 35%, #63e86a, #20a63a); color: #fff; pointer-events: auto;
+  box-shadow: 0 4px 0 #13742a, 0 6px 14px rgb(0 0 0 / 35%); touch-action: none; cursor: pointer;
+  font: 700 13px/1 'Fredoka', 'Arial Black', Arial, sans-serif; -webkit-tap-highlight-color: transparent;
+}
+.touch-jump svg { width: 26px; height: 26px; fill: #fff; stroke: #0c3d16; stroke-width: 1.5; paint-order: stroke fill; }
+.touch-jump span { -webkit-text-stroke: 3px #0c3d16; paint-order: stroke fill; }
+.touch-jump:active { transform: translateY(3px); box-shadow: 0 1px 0 #13742a, 0 3px 8px rgb(0 0 0 / 35%); }
+/* Portrait: the bottom bar spans the width, so the button sits just above the level bar (179 screenshot pixels
+   up at the HUD's --u, see StartingPlaceHUD.css), beside the sound button. */
+@media (max-aspect-ratio: 1/1) {
+  .touch-jump { bottom: calc(min(100vw / 960, 100vh / 1004) * 179 + 8px); }
+}

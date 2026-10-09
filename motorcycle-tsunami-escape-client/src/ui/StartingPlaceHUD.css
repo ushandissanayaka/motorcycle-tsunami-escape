@@ -1,9 +1,16 @@
 /*
  * HUD art is cut from the reference screenshot (1919x1004). --u is one screenshot pixel at the
  * current window size, so positions, sizes and text keep the same proportions at any resolution.
+ * The HUD hugs the screen edges (left column, right column, centred bottom bar), so it only needs about 960
+ * screenshot pixels of width, not all 1919: sizing by that keeps the icons big enough to read and tap on narrow
+ * and portrait screens instead of shrinking them to half. Popups fit themselves inside that (see popupParts.jsx).
  */
 .starting-hud {
-  --u: min(100vw / 1919, 100vh / 1004);
+  --hud-u: min(100vw / 960, 100vh / 1004);
+  --u: var(--hud-u);
+  /* Extra drop for the right column so its top row (y 70) sits a gap below the account pill, whose height has a
+     floor (AccountPanel.css: top 8, height max(56u, 38px)). */
+  --right-shift: calc(8 * var(--u) + max(calc(56 * var(--u)), 38px) + max(calc(14 * var(--u)), 8px) - 70 * var(--u));
   position: absolute; inset: 0; color: #fff; pointer-events: none;
   font-family: 'Fredoka', 'Lilita One', 'Arial Black', Arial, sans-serif; font-weight: 700;
 }
@@ -87,6 +94,29 @@
   12% { opacity: 1; transform: translateX(-50%) scale(1.08); }
   20% { transform: translateX(-50%) scale(1); }
   82% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(-50%) translateY(calc(-20 * var(--u))); }
+}
+
+/* "You leveled up!" in gold over "Level N", popping in at the centre of the screen and fading away. */
+.level-up-banner {
+  position: absolute; z-index: 8; top: 30%; left: 50%; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: calc(10 * var(--u));
+  pointer-events: none; animation: level-up-banner 2.6s ease-out both;
+}
+.level-up-title {
+  position: relative; white-space: nowrap; line-height: 1.1; font-size: max(calc(120 * var(--u)), 40px);
+  color: #1b1206; -webkit-text-stroke: max(calc(18 * var(--u)), 6px) #1b1206; /* the outline... */
+}
+.level-up-title::after { /* ...and the gold letters over it, a copy of the text */
+  content: attr(data-text); position: absolute; inset: 0; -webkit-text-stroke: 0;
+  background: linear-gradient(#fff15a 25%, #ffb300 80%); -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.level-up-level { font-size: max(calc(56 * var(--u)), 20px); --sw: 9; }
+@keyframes level-up-banner {
+  0% { opacity: 0; transform: translateX(-50%) scale(.4); }
+  12% { opacity: 1; transform: translateX(-50%) scale(1.08); }
+  20% { transform: translateX(-50%) scale(1); }
+  80% { opacity: 1; }
   100% { opacity: 0; transform: translateX(-50%) translateY(calc(-20 * var(--u))); }
 }
 

@@ -49,6 +49,7 @@ const LEAN_IN = 30; // how fast the bike tips into a lean, per second (times the
 const LEAN_OUT = 7; // how fast it straightens up again, per second: more gently, so a quick flick still shows
 const KEY_DIRECTION = { w: 0, a: Math.PI / 2, s: Math.PI, d: -Math.PI / 2 }; // heading offset from the camera's
 const KEY_CODES = { KeyW: 'w', KeyA: 'a', KeyS: 's', KeyD: 'd' };
+const STICK_DEAD_ZONE = 0.25; // how far (of its full reach) the touch joystick must be pushed to drive
 
 /** Angle from `from` to `to`, wrapped to (-PI, PI]. */
 const angleTo = (from, to) => {
@@ -60,8 +61,10 @@ const angleTo = (from, to) => {
 
 export function createInputState() {
   // w / a / s / d / space: held now. `heldSince`: when each direction key went down. `taps`: direction
-  // keys pressed since the last movement update, for their one-off tap turns.
-  const keys = { w: false, a: false, s: false, d: false, space: false, heldSince: {}, taps: [] };
+  // keys pressed since the last movement update, for their one-off tap turns. `stick`: the on-screen touch
+  // joystick (ui/TouchControls.jsx), { x, y } from -1 to 1 with y up the screen, or null while it is let go; it
+  // is not reset by clear(), since a thumb still on the stick keeps steering, as a held key does.
+  const keys = { w: false, a: false, s: false, d: false, space: false, heldSince: {}, taps: [], stick: null };
   keys.clear = () => {
     keys.w = keys.a = keys.s = keys.d = keys.space = false;
     keys.heldSince = {};
@@ -130,6 +133,14 @@ function steer(target, keys, deltaSeconds, cameraYaw) {
     x += Math.sin(KEY_DIRECTION[key]);
     z += Math.cos(KEY_DIRECTION[key]);
     if (now - (keys.heldSince[key] ?? now) >= HOLD_MS) heldLong = true;
+  }
+  // The touch joystick points the same camera-relative way (up = forward, right = right) and drives at once,
+  // like a held key, once pushed past its dead zone.
+  const stick = keys.stick;
+  if (stick && Math.hypot(stick.x, stick.y) > STICK_DEAD_ZONE) {
+    x -= stick.x;
+    z += stick.y;
+    heldLong = true;
   }
   let driving = false;
   if (Math.hypot(x, z) > 1e-6) {

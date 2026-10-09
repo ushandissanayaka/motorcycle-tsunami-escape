@@ -20,10 +20,10 @@ const DEFAULT_ORIGINS = [
 
 const app = express();
 // CLIENT_ORIGIN may list several origins, comma-separated (the game's own host, and the preview/dev hosts).
-const allowedOrigins = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean);
+const allowedOrigins = (process.env.CLIENT_ORIGIN || DEFAULT_ORIGINS).split(',').map((origin) => origin.trim()).filter(Boolean);
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json({ limit: '32kb' }));
-app.get('/health', (_request, response) => response.json({ ok: true, service: 'motorcycle-tsunami-escape' }));
+app.get('/health', (_request, response) => response.json({ ok: true, service: 'motorcycle-tsunami-escape', version: process.env.APP_VERSION || 'dev' }));
 // Bloxity: the client's Legion.SDK.auth.authenticateWithServer() posts here when a real user logs in...
 app.post('/api/legion-auth', legionAuthHandler);
 // ...and Bloxity's servers post every completed Bux purchase here (server to server). It must answer 2xx or
